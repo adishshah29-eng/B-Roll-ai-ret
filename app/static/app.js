@@ -58,7 +58,7 @@ function render(res, ms, title) {
   const total = res.clusters.reduce((n, c) => n + c.shots.length, 0);
   const meta = $("#meta");
   meta.replaceChildren(`${total} shots in ${res.clusters.length} variations · server ${res.took_ms ?? "cache"} ms · round trip ${ms.toFixed(0)} ms${res.cached ? " · cached" : ""}`);
-  (res.missing || []).forEach((m) => meta.append(el("span", { class: "warn" }, "⚠ " + m)));
+  (res.missing || []).forEach((m) => meta.append(el("span", { class: "warn" }, m)));
   if (!total) { results.append(el("div", { class: "empty" }, "No relevant shots found. Try other words or remove filters.")); return; }
   res.clusters.forEach((c) => {
     results.append(el("div", { class: "cluster" },
@@ -161,7 +161,7 @@ $("#planBtn").addEventListener("click", async () => {
   $("#planBtn").disabled = true;
   try {
     const mode = $("#cutMode").value;
-    PLAN = await api("/api/plan", { script, use_truth: $("#truthOn").checked, use_cuts: mode !== "greedy", cut_weight: mode === "smooth" ? 0.8 : null });
+    PLAN = await api("/api/plan", { script, use_truth: $("#truthOn").checked, use_memory: $("#memOn").checked, use_cuts: mode !== "greedy", cut_weight: mode === "smooth" ? 0.8 : null });
     renderPlan();
     renderSeqSummary();
     $("#playSeqBtn").disabled = !PLAN.beats.some((x) => x.chosen.length);
@@ -171,19 +171,19 @@ $("#planBtn").addEventListener("click", async () => {
   $("#planBtn").disabled = false;
 });
 
-const ICON = { ok: "✓", unverified: "?", warn: "!", bad: "✕" };
+const ICON = { ok: "", unverified: "", warn: "", bad: "" };      // status is drawn with a coloured marker in CSS
 const STATUS_TEXT = { ok: "Verified", unverified: "Unverified", warn: "Check label", bad: "Contradicts" };
 
 const CUT_CHIPS = {
-  "progress": ["good", "✓ size progression"], "jump": ["bad", "⚠ jump cut"], "flip": ["bad", "⚠ direction flip"],
-  "exposure": ["bad", "⚠ brightness jump"], "colour": ["bad", "⚠ colour shift"], "same-size": ["", "= same shot size"],
+  "progress": ["good", "size progression"], "jump": ["bad", "jump cut"], "flip": ["bad", "direction flip"],
+  "exposure": ["bad", "brightness jump"], "colour": ["bad", "colour shift"], "same-size": ["", "same shot size"],
 };
 
 function cutChips(s) {
   if (!s.cut) return "";
   const chips = s.cut.flags.filter((f) => CUT_CHIPS[f]).map((f) => el("span", { class: "cc " + CUT_CHIPS[f][0] }, CUT_CHIPS[f][1]));
   return el("div", { class: "cutchips", title: "How this clip cuts from the previous one" },
-    chips.length ? chips : el("span", { class: "cc good" }, "✓ clean cut"));
+    chips.length ? chips : el("span", { class: "cc good" }, "clean cut"));
 }
 
 function renderSeqSummary() {
@@ -214,7 +214,7 @@ function verdictBlock(s) {
   return el("div", { class: "vblock" },
     cutChips(s),
     el("div", { class: "vhead" },
-      el("span", { class: "pill st-" + v.status }, `${ICON[v.status]} ${STATUS_TEXT[v.status]}`),
+      el("span", { class: "pill st-" + v.status }, STATUS_TEXT[v.status]),
       s.label ? el("span", { class: "labelpill", title: "Added automatically to the export as a caption" }, s.label) : ""),
     rows.length ? el("ul", { class: "checks" }, rows) : "");
 }
@@ -225,10 +225,10 @@ function claimChips(b) {
   const chips = [];
   if (c.places.length) {
     chips.push(el("span", { class: "claim" + (c.place_inherited ? " inh" : ""), title: c.place_inherited ? "carried over from an earlier line" : "" },
-      "📍 " + c.places[0] + (c.place_inherited ? " (context)" : "")));
+      el("b", {}, "Place"), c.places[0] + (c.place_inherited ? " (carried over)" : "")));
   }
-  if (c.time) chips.push(el("span", { class: "claim" }, "🕒 " + c.time));
-  if (c.weather) chips.push(el("span", { class: "claim" }, "🌦 " + c.weather));
+  if (c.time) chips.push(el("span", { class: "claim" }, el("b", {}, "Time"), c.time));
+  if (c.weather) chips.push(el("span", { class: "claim" }, el("b", {}, "Weather"), c.weather));
   return chips.length ? el("div", { class: "claims" }, chips) : "";
 }
 
@@ -240,7 +240,7 @@ function renderPlan() {
       ? `No truthful shot found — ${b.n_rejected} candidate(s) contradict the narration (see below).`
       : "No relevant shot found for this line.";
     const chosen = el("div", { class: "chosen" }, b.chosen.length
-      ? b.chosen.map((s) => el("div", { class: "chosen-item" }, card(s, false), verdictBlock(s)))
+      ? b.chosen.map((s) => el("div", { class: "chosen-item" }, card(s, false), verdictBlock(s), whyBlock(s)))
       : el("div", { class: "nomatch" }, none));
     const alts = el("div", { class: "alts" }, b.alts.map((s) =>
       el("div", { class: "alt", title: `${s.file} · score ${s.score}${s.verdict ? " · " + STATUS_TEXT[s.verdict.status] : ""}`, onclick: () => swap(bi, s.id) },
@@ -274,9 +274,11 @@ function swap(bi, shotId) {
   const k = b.alts.findIndex((s) => s.id === shotId);
   if (k < 0) return;
   const picked = b.alts.splice(k, 1)[0];
+  const dropped = b.chosen[0];
   if (b.chosen.length) b.alts.unshift(b.chosen[0]);
   b.chosen[0] = picked;
   renderPlan();
+  teach(b.text, picked, dropped ? [dropped.id] : []);    // a swap is a lesson: you preferred this one
 }
 
 document.querySelectorAll(".export").forEach((btn) => btn.addEventListener("click", async () => {
@@ -289,6 +291,7 @@ document.querySelectorAll(".export").forEach((btn) => btn.addEventListener("clic
     try { why = JSON.parse(r.headers.get("X-Epoch-Skipped-Detail")).map((k) => `Beat ${k.beat + 1}: ${k.file} — ${k.reason}`).join("\n"); } catch {}
     alert(`${skipped} clip(s) could not be added to the export:\n\n${why}\n\nSwap them for another shot and export again.`);
   }
+  if (btn.dataset.fmt === "xml") PLAN.beats.forEach((b) => b.chosen.forEach((s) => teach(b.text, s, [])));   // exporting = accepting
   const blob = await r.blob();
   const name = (r.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/)?.[1] || "export.txt";
   const a = el("a", { href: URL.createObjectURL(blob), download: name });
@@ -370,3 +373,49 @@ function stopSequence() { seqToken++; $("#seqVideo").pause(); $("#seqModal").hid
 $("#playSeqBtn").addEventListener("click", playSequence);
 $("#seqClose").addEventListener("click", stopSequence);
 $("#seqModal").addEventListener("click", (e) => e.target.id === "seqModal" && stopSequence());
+
+// ---------- YOURS: edit memory ----------
+function whyBlock(s) {
+  if (!s.why || !s.why.length) return "";
+  return el("ul", { class: "why", title: "Why this clip was chosen" }, s.why.map((w) => el("li", {}, w)));
+}
+
+function teach(text, shot, rejectedIds) {
+  fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, chosen_id: shot.id, rejected_ids: rejectedIds }) }).then(loadMemory).catch(() => {});
+}
+
+async function loadMemory() {
+  try {
+    const m = await api("/api/memory/status");
+    const box = $("#memStats");
+    box.replaceChildren(
+      el("span", { class: "big" }, m.n), `lessons learned from ${m.projects.length} project${m.projects.length === 1 ? "" : "s"}`,
+      m.negatives ? ` · ${m.negatives} shots you passed on` : "",
+      m.n ? el("div", { class: "mix" }, el("span", { class: "meta" }, "Your house style:"),
+        Object.entries(m.size_mix).map(([k, v]) => el("span", { class: "mempill" }, `${k === "close" ? "close-up" : k} ${Math.round(v * 100)}%`)),
+        m.active ? "" : el("span", { class: "meta" }, `(needs ${5 - m.n} more lessons before it shapes results)`))
+        : el("div", { class: "meta" }, "No history yet. Import a past timeline below, or just swap and export in the Script tab."));
+  } catch { /* ignore */ }
+}
+
+$("#memFile").addEventListener("change", () => {
+  const f = $("#memFile").files[0];
+  if (f && !$("#memProject").value) $("#memProject").value = f.name.replace(/\.[^.]+$/, "");
+});
+$("#memImportBtn").addEventListener("click", async () => {
+  const f = $("#memFile").files[0], script = $("#memScript").value.trim(), msg = $("#memMsg");
+  if (!f || !script) { msg.textContent = "Choose a timeline file and paste its script."; return; }
+  msg.textContent = "Learning…";
+  try {
+    const r = await api("/api/memory/import", { xml: await f.text(), script, project: $("#memProject").value || f.name });
+    msg.textContent = `Learned ${r.pairs} lesson${r.pairs === 1 ? "" : "s"} (${r.unmatched} clip${r.unmatched === 1 ? "" : "s"} could not be matched to your library).`;
+    loadMemory();
+  } catch (e) { msg.textContent = e.message; }
+});
+$("#memClear").addEventListener("click", async () => {
+  if (!confirm("Forget everything learned from your edits?")) return;
+  await fetch("/api/memory", { method: "DELETE" });
+  $("#memMsg").textContent = "Memory cleared."; loadMemory();
+});
+loadMemory();

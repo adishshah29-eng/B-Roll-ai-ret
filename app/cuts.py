@@ -25,6 +25,7 @@ from . import db
 CUT_WEIGHT = 0.25          # relevance units per unit of normalised transition cost; tuned in eval/eval_cuts.py (D24)
 NORM = 4.0
 REPEAT_PENALTY = 1.0
+SOURCE_REPEAT_PENALTY = 0.03   # per extra use of the same source file across the sequence (variety across the whole cut)
 FLOW_MIN = 0.25            # px of mean motion per 0.3 s at 160 px width below which a shot counts as static
 JUMP_WINDOW_S = 10.0
 SIZE_RANK = {"aerial": 1, "wide": 1, "medium": 2, "close": 3, "detail": 4}
@@ -127,7 +128,8 @@ def objective(seq: list, w=CUT_WEIGHT) -> float:
     j = sum(n.unary for n in seq)
     j -= w * sum(transition(a, b).cost for a, b in zip(seq, seq[1:]) if a.row != b.row)
     dup = len(seq) - len({n.row for n in seq})
-    return j - REPEAT_PENALTY * dup
+    src_rep = len(seq) - len({n.key for n in seq})
+    return j - REPEAT_PENALTY * dup - SOURCE_REPEAT_PENALTY * src_rep
 
 
 def viterbi(slots: list, w=CUT_WEIGHT) -> list:

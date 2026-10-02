@@ -10,11 +10,12 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db, export, models, planner, truth
+from . import db, export, memory, models, planner, truth
 from .config import DEFAULT_DIVERSITY, DEFAULT_K, THUMBS
 from .indexer import jobs, worker
 from .search import Searcher
 from .sources import hydrate, ingest
+from .editor import api as editor_api
 from .store import SnapshotHolder
 
 STATIC = Path(__file__).parent / "static"
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
     holder = SnapshotHolder()
     state["holder"] = holder
     state["search"] = Searcher(holder)
+    editor_api.get_searcher = lambda: state["search"]
     models.mtext()                       # warm: load multilingual text tower once
     state["search"].warmup()
     threading.Thread(target=_poller, daemon=True, name="snap-poller").start()
@@ -47,6 +49,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Epoch B-roll", lifespan=lifespan)
+app.include_router(editor_api.router)
 
 
 class SearchReq(BaseModel):
@@ -70,6 +73,7 @@ class PlanReq(BaseModel):
     wpm: int = 150
     use_truth: bool = True
     use_cuts: bool = True
+    use_memory: bool = True
     cut_weight: float | None = None
     today: str | None = None            # ISO date to evaluate "today/this week" against (demo + tests)
 
@@ -130,13 +134,58 @@ def search(req: SearchReq):
                                   diversity=max(0.0, min(req.diversity, 1.0)), filters=req.filters)
 
 
+class MemImport(BaseModel):
+    xml: str
+    script: str
+    project: str = "past project"
+
+
+class Feedback(BaseModel):
+    text: str
+    chosen_id: int
+    rejected_ids: list[int] = []
+
+
+@app.post("/api/memory/import")
+def memory_import(req: MemImport):
+    try:
+        return memory.import_timeline(req.xml, req.script, req.project.strip() or "past project")
+    except Exception as e:
+        raise HTTPException(400, f"could not read that timeline: {e}")
+
+
+@app.get("/api/memory/status")
+def memory_status():
+    return memory.style()
+
+
+@app.post("/api/feedback")
+def feedback(req: Feedback):
+    return memory.feedback(req.text, req.chosen_id, req.rejected_ids)
+
+
+@app.delete("/api/memory")
+def memory_clear():
+    return {"cleared": memory.clear()}
+
+
+@app.get("/api/health")
+def health():
+    from .indexer import worker as _w
+    c = db.conn()
+    ocr_ok = _w.STAGE_HANDLERS.get("ocr") is not None
+    return {"ok": True, "shots": len(state["holder"].get()), "ocr": ocr_ok,
+            "pixabay_key": bool(__import__("os").getenv("PIXABAY_API_KEY")),
+            "memory_pairs": c.execute("SELECT COUNT(*) FROM memory_pairs").fetchone()[0]}
+
+
 @app.post("/api/plan")
 def make_plan(req: PlanReq):
     if not req.script.strip():
         raise HTTPException(400, "empty script")
     t0 = time.perf_counter()
     out = planner.plan(state["search"], req.script, wpm=req.wpm, use_truth=req.use_truth, today=req.today,
-                       use_cuts=req.use_cuts, cut_weight=req.cut_weight)
+                       use_cuts=req.use_cuts, cut_weight=req.cut_weight, use_memory=req.use_memory)
     out["took_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     return out
 

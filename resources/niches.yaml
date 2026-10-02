@@ -1,0 +1,29 @@
+# Niche presets: a style direction blended into every visual query (embedding blend, not keyword stuffing).
+# `hint` is embedded with the same multilingual text model as queries, so Hindi scripts get the same lift.
+motivation:
+  label: Motivation
+  hint: inspiring cinematic footage, sunrise over mountains, a runner at dawn, determined person, city skyline at golden hour
+travel:
+  label: Travel
+  hint: cinematic travel footage, scenic destinations, aerial views of landscapes, street life in a new city, trains and roads
+gaming:
+  label: Gaming
+  hint: gaming setup with neon lights, keyboard and monitor glowing in a dark room, esports, controller close-up
+tech:
+  label: Tech
+  hint: technology footage, laptop screen with code, circuit boards, smartphone, futuristic city lights, data
+education:
+  label: Education
+  hint: students learning in a classroom, books and notes, whiteboard, teacher explaining, library
+music:
+  label: Music
+  hint: musician playing an instrument, concert stage lights, recording studio, headphones, crowd dancing
+health_beauty:
+  label: Health & beauty
+  hint: fitness and yoga, healthy food, skincare routine, wellness, smiling people outdoors
+vlog:
+  label: Vlogging
+  hint: daily life vlog footage, walking through a street, cafe, handheld lifestyle shots, friends together
+business:
+  label: Business
+  hint: office team meeting, handshake, startup workspace, laptop typing, city business district

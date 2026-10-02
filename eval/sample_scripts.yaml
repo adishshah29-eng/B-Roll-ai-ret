@@ -1,0 +1,93 @@
+# Sample scripts for testing and for the live demo. Paste the `script:` text into the Script tab.
+# `try` says which switches to use; `look_for` says what you should see. Run all of them: python -m eval.run_samples
+- id: mumbai_monsoon
+  title: "1. Mumbai monsoon (the main TRUE demo)"
+  pillar: TRUE
+  script: |
+    Heavy rain lashed Mumbai today, bringing traffic to a halt.
+    Commuters waited for hours at flooded local stations.
+    Street vendors covered their stalls with plastic sheets.
+    By evening, the city's roads turned into rivers.
+    Residents say this is the worst monsoon in years.
+  try: "Defaults. Open the 'shots rejected' drawer on beats 1 and 2."
+  look_for: "Beat 1 picks a clip whose signboard reads MUMBAI LOCAL (place confirmed). Rejected with evidence: a Delhi-signboard clip, Bangkok metro, Kolkata and Indonesia clips. Later beats keep 'Mumbai (context)'."
+
+- id: file_footage
+  title: "2. Old footage under 'today' (auto FILE label)"
+  pillar: TRUE
+  script: |
+    Floodwater covered the streets today.
+    Residents waded through the rain.
+    In 2019 floodwater covered these streets too.
+  try: "Defaults. Then Export > Captions to see the label."
+  look_for: "Beat 1 shows an amber 'FILE · 20xx' label (footage recorded years ago). Beat 3 ('In 2019') rejects clips recorded in other years, with the dates as evidence."
+
+- id: history_1906
+  title: "3. A year claim (1906)"
+  pillar: TRUE
+  script: |
+    In 1906, a street in India looked like this.
+    Crowds moved through the market in the heat of the day.
+    Carts and people filled the road.
+  try: "Defaults."
+  look_for: "Picks the 1906 public-domain film from the open archive (green '1906' date badge); modern clips are rejected for the year."
+
+- id: street_food_paris
+  title: "4. A real contradiction hidden in stock footage"
+  pillar: TRUE
+  script: |
+    Street food stalls come alive in Mumbai every evening.
+    A cook stirs a hot pan.
+    Families share a meal together.
+  try: "Defaults. Check the rejected drawer on beat 1."
+  look_for: "A 'street food' clip is rejected because OCR read the shop sign PARIS (shown as evidence)."
+
+- id: hindi_rain
+  title: "5. Hindi narration"
+  pillar: base + TRUE
+  script: |
+    आज मुंबई में भारी बारिश हुई।
+    लोग स्टेशन पर इंतज़ार करते रहे।
+    सड़कें नदी बन गईं।
+    बच्चे पानी में खेलते रहे।
+  try: "Defaults."
+  look_for: "Chips show Mumbai / today / rain read from Hindi. Same quality of results as English."
+
+- id: rain_dense
+  title: "6. Dense single topic (the CUTS A/B)"
+  pillar: CUTS
+  script: |
+    Rain falls on the street.
+    Water runs along the road.
+    Wet streets shine under the lights.
+    Umbrellas move through the crowd.
+    Puddles ripple as cars pass.
+    The storm keeps on.
+  try: "Plan with 'Relevance only', note the summary, then plan with 'Cut-aware: balanced' and press Play sequence."
+  look_for: "Relevance-only has brightness jumps / repeated shot sizes; cut-aware shows fewer problems and more wide->medium->close progressions, at about the same relevance."
+
+- id: creator_motivation
+  title: "7. 60-second creator script (motivation niche)"
+  pillar: base + YOURS
+  script: |
+    Every great journey starts before sunrise.
+    While the city sleeps, someone is already running.
+    No audience. No applause. Just discipline.
+    The road is long, and the climb is steep.
+    But every step forward is a step away from who you were.
+    Keep going. The view from the top is worth it.
+  try: "Plan once. Swap two clips, then export the XML (this teaches Edit Memory). Plan again with 'Use my edit history' on, then off."
+  look_for: "Why-lines show 'matches your style' / 'chosen N x in your past edits' after you have taught it. Niche presets (motivation) are available through the API now; the dropdown arrives with the sponsor-fit UI."
+
+- id: ad_cut_long
+  title: "8. Long script for the 15-second ad cut"
+  pillar: formats
+  script: |
+    Meet the new way to make videos.
+    Start with a script, any script.
+    Every line finds footage that fits.
+    Clips cut together smoothly, one after another.
+    Everything is checked so nothing misleads your viewers.
+    Export when you are happy, and you are done.
+  try: "API for now: POST /api/plan with {\"script\": ..., \"target_s\": 15}; also {\"max_shot_s\": 3} for engagement pacing and {\"commercial_only\": true}."
+  look_for: "Total length 15.0 s, opening and closing lines kept; with max_shot_s=3 the same script gets more, shorter clips."

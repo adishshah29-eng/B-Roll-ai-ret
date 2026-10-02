@@ -9,7 +9,7 @@ from collections import OrderedDict
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 
-from . import db, models
+from . import db, licence, models, niches
 from .config import (CANDIDATES_TOP, CLUSTER_DIST, DEDUPE_SIM, DEDUPE_WINDOW_S, DEFAULT_DIVERSITY,
                      DEFAULT_K, GATE_DELTA, MIN_SCORE)
 from .indexer import tags
@@ -18,6 +18,8 @@ from .store import Snapshot, SnapshotHolder
 
 MMR_POOL = 100
 SIMILAR_PER_SOURCE = 2
+SEARCH_PER_SOURCE = 4         # one long film must not fill the whole results page
+PLAN_PER_SOURCE = 3
 
 
 class LRU:
@@ -162,9 +164,24 @@ class Searcher:
             m &= snap.orient == f["orientation"]
         if f.get("source"):
             m &= np.isin(snap.source, f["source"])
+        if f.get("licence") == "commercial":              # ads / commercial videos: own, free-to-use, credit-only
+            m &= np.isin(snap.lic, licence.COMMERCIAL)
+        if f.get("min_len"):
+            m &= (snap.t1 - snap.t0) >= float(f["min_len"])
         return m
 
-    def _relevant(self, snap: Snapshot, q: np.ndarray, mask: np.ndarray):
+    @staticmethod
+    def _cap_per_source(snap: Snapshot, rows: list, cap: int) -> list:
+        """Keep at most `cap` shots per source file / stock item, preserving relevance order."""
+        seen, out = {}, []
+        for r in rows:
+            k = int(snap.file_id[r]) if snap.file_id[r] >= 0 else 1_000_000 + int(snap.stock_id[r])
+            if seen.get(k, 0) < cap:
+                seen[k] = seen.get(k, 0) + 1
+                out.append(r)
+        return out
+
+    def _relevant(self, snap: Snapshot, q: np.ndarray, mask: np.ndarray, cap: int | None = None):
         """Return (rows sorted by relevance desc, scores array for all rows). Gate + dedupe applied."""
         if len(snap) == 0:
             return [], np.zeros(0)
@@ -178,27 +195,28 @@ class Searcher:
         keep = gate(scores[top])
         top = top[keep]
         key = np.where(snap.file_id >= 0, snap.file_id, 1_000_000 + snap.stock_id)
-        return dedupe(top, snap.E, key, snap.t0), scores
+        rows = dedupe(top, snap.E, key, snap.t0)
+        return (self._cap_per_source(snap, rows, cap) if cap else rows), scores
 
-    def candidates(self, text: str, k: int = 8, filters=None) -> list:
+    def candidates(self, text: str, k: int = 8, filters=None, niche=None) -> list:
         """Planner input: relevance-gated, deduped, NOT clustered. Returns [(row, score)]."""
         snap = self.holder.get()
-        q = self.encode(text)
-        rows, scores = self._relevant(snap, q, self._mask(snap, filters))
+        q = niches.blend(self.encode(text), niche)
+        rows, scores = self._relevant(snap, q, self._mask(snap, filters), cap=PLAN_PER_SOURCE)
         return [(r, float(scores[r])) for r in rows[:k]]
 
-    def search(self, query: str, k=DEFAULT_K, diversity=DEFAULT_DIVERSITY, filters=None) -> dict:
+    def search(self, query: str, k=DEFAULT_K, diversity=DEFAULT_DIVERSITY, filters=None, niche=None) -> dict:
         self._sync()
-        ck = (query, json.dumps(filters or {}, sort_keys=True), k, round(diversity, 3), self._ver)
+        ck = (query, json.dumps(filters or {}, sort_keys=True), k, round(diversity, 3), niche or "", self._ver)
         hit = self.r_cache.get(ck)
         if hit is not None:
             return {**hit, "timings": {"cache": 0.1}, "cached": True}
         t = Timings()
         snap = self.holder.get()
         with t.stage("encode"):
-            q = self.encode(query)
+            q = niches.blend(self.encode(query), niche)
         with t.stage("retrieve"):
-            rows, scores = self._relevant(snap, q, self._mask(snap, filters))
+            rows, scores = self._relevant(snap, q, self._mask(snap, filters), cap=SEARCH_PER_SOURCE)
         with t.stage("mmr"):
             pool = rows[:MMR_POOL]
             picked = mmr(pool, scores, snap.E, k, diversity)
@@ -251,6 +269,16 @@ class Searcher:
         return {"shots": [cards[r] for r in rows]}
 
 
+def _licence_card(d) -> dict:
+    cls = licence.classify(d["licence"], d["licence_url"], d["source"])
+    out = {"class": cls, "label": licence.LABELS[cls], "commercial": licence.is_commercial(cls),
+           "text": d["licence"] if d["licence"] and not str(d["licence"]).startswith("http") else
+           (d["licence_url"] or d["licence"] or ""), "url": d["licence_url"] or ""}
+    if cls in ("attribution", "caution"):
+        out["credit"] = licence.attribution_text(d["title"] or d["path"], d["author"], d["licence"], d["licence_url"], d["page_url"])
+    return out
+
+
 def shot_cards(snap: Snapshot, rows: list, scores: np.ndarray) -> dict:
     """Fetch display fields for ≤k shots in a single query."""
     if not rows:
@@ -260,7 +288,7 @@ def shot_cards(snap: Snapshot, rows: list, scores: np.ndarray) -> dict:
     recs = {r["id"]: r for r in db.conn().execute(
         f"""SELECT s.id, s.file_id, s.stock_id, s.t_start, s.t_end, s.thumb, s.size_tag, s.motion,
                    s.orientation, s.weather, f.path, si.title, si.source, si.author, si.page_url,
-                   p.shot_date, p.date_source
+                   si.licence, si.licence_url, p.shot_date, p.date_source
             FROM shots s LEFT JOIN files f ON f.id=s.file_id LEFT JOIN stock_items si ON si.id=s.stock_id
                  LEFT JOIN provenance p ON p.shot_id=s.id
             WHERE s.id IN ({q})""", ids)}
@@ -275,6 +303,7 @@ def shot_cards(snap: Snapshot, rows: list, scores: np.ndarray) -> dict:
             "size": d["size_tag"], "motion": d["motion"], "orientation": d["orientation"], "weather": d["weather"],
             "source": d["source"] or "own", "author": d["author"], "page_url": d["page_url"],
             "date": (d["shot_date"] or "")[:10], "date_src": d["date_source"] or "unknown",
+            "title": d["title"], "licence": _licence_card(d),
             "thumb": f"/media/thumb/{sid}",
         }
     return out

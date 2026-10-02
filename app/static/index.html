@@ -7,12 +7,18 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M4.5 3v10l8-5z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+  <symbol id="i-back" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></symbol>
+</svg>
 <header class="top">
-  <div class="brand"><span class="logo">◐</span> Epoch <small>True · Cuts · Yours</small></div>
+  <div class="brand"><span class="logo"></span>Epoch <small>true · cuts · yours</small></div>
   <nav class="tabs" id="tabs">
+    <button data-tab="editor">Editor</button>
     <button data-tab="search" class="active">Search</button>
     <button data-tab="script">Script</button>
-    <button data-tab="memory" disabled title="Coming in P7">Memory</button>
+    <button data-tab="memory">Memory</button>
   </nav>
   <div class="status" id="status">connecting…</div>
 </header>
@@ -20,7 +26,7 @@
 <main>
   <section id="tab-search" class="tab active">
     <form id="searchForm" class="searchbar" autocomplete="off">
-      <input id="q" type="search" placeholder="Search your footage… e.g. rain on the road · बारिश में सड़क पर ट्रैफिक" autofocus>
+      <input id="q" type="search" placeholder="Search your footage, e.g. rain on the road / बारिश में सड़क पर ट्रैफिक" autofocus>
       <button type="submit" class="primary">Search</button>
     </form>
 
@@ -68,16 +74,63 @@
         <option value="smooth">Cut-aware: smoothest</option>
         <option value="greedy">Relevance only</option>
       </select></label>
+      <label class="toggle" title="Boost shots you chose before for similar lines, and your house style"><input type="checkbox" id="memOn" checked> Use my edit history</label>
       <label class="toggle" title="Check every shot against the claims in the narration: place, date, weather"><input type="checkbox" id="truthOn" checked> Check footage against narration</label>
       <span class="spacer"></span>
       <span id="planMeta" class="meta"></span>
-      <button id="playSeqBtn" class="ghost" disabled>▶ Play sequence</button>
+      <button id="playSeqBtn" class="ghost" disabled><svg class="i"><use href="#i-play"/></svg>Play sequence</button>
       <button class="ghost export" data-fmt="xml" disabled>Export XML (Premiere / Resolve)</button>
       <button class="ghost export" data-fmt="edl" disabled>EDL</button>
       <button class="ghost export" data-fmt="credits" disabled>Credits</button>
     </div>
     <div id="seqSummary"></div>
     <div id="plan"></div>
+  </section>
+  <section id="tab-editor" class="tab">
+    <div id="edStart">
+      <h3 class="memh">Add B-roll to your video</h3>
+      <p class="meta">Upload a talking-head or A-roll video. It transcribes the speech, picks where B-roll should cut in, fills each spot
+        with footage that is true to what you say and cuts well, then renders the finished video with your original audio.</p>
+      <div id="edEngine" class="meta" style="margin:6px 0 10px"></div>
+      <div class="memform">
+        <input id="edFile" type="file" accept="video/*">
+        <input id="edName" placeholder="Project name (optional)">
+        <textarea id="edScript" rows="3" placeholder="Optional: paste your script for cleaner wording (timing always comes from the audio)"></textarea>
+        <div class="script-actions"><button id="edUpload" class="primary">Upload and analyse</button><span id="edMsg" class="meta"></span></div>
+        <div class="seqbar"><div id="edProg"></div></div>
+      </div>
+      <h3 class="memh">Recent projects</h3>
+      <div id="edList" class="meta"></div>
+    </div>
+    <div id="edWork" hidden>
+      <div class="edtop"><button id="edBack" class="ghost"><svg class="i"><use href="#i-back"/></svg>Projects</button><b id="edTitle"></b><span id="edInfo" class="meta"></span>
+        <span class="spacer"></span><button id="edAdd" class="ghost"><svg class="i"><use href="#i-plus"/></svg>B-roll at playhead</button>
+        <button id="edRender" class="primary">Render video</button></div>
+      <div id="edSummary" class="edsum"></div>
+      <div class="edstage">
+        <video id="edMain" controls playsinline></video>
+        <video id="edOver" muted playsinline></video>
+        <div id="edBadge"></div>
+      </div>
+      <div class="edwrap"><div class="edlanes"><span>B-ROLL</span><span>FRAMES</span><span>SPEECH</span></div>
+        <div id="edTimeline" class="edtl"><div id="edHead" class="edhead"></div></div></div>
+      <div id="edTranscript" class="edtr"></div>
+      <div id="edPanel"></div>
+      <div id="edOut"></div>
+    </div>
+  </section>
+  <section id="tab-memory" class="tab">
+    <div class="memcard" id="memStats"></div>
+    <h3 class="memh">Teach it from a past edit</h3>
+    <p class="meta">Import a timeline you already cut (Premiere / Resolve XML or EDL) plus the narration it was cut to. Every B-roll clip you placed
+      under a line becomes a lesson. Swaps and exports in the Script tab teach it too, with no labelling.</p>
+    <div class="memform">
+      <input id="memProject" placeholder="Project name (e.g. Diwali episode)">
+      <input id="memFile" type="file" accept=".xml,.edl,.fcpxml">
+      <textarea id="memScript" rows="5" placeholder="Paste the script / narration this timeline was cut to"></textarea>
+      <div class="script-actions"><button id="memImportBtn" class="primary">Learn from this timeline</button>
+        <button id="memClear" class="ghost">Clear memory</button><span id="memMsg" class="meta"></span></div>
+    </div>
   </section>
 </main>
 
@@ -101,5 +154,6 @@
 </div>
 
 <script src="/static/app.js"></script>
+<script src="/static/editor.js"></script>
 </body>
 </html>
