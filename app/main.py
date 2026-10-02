@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db, export, models, planner
+from . import db, export, models, planner, truth
 from .config import DEFAULT_DIVERSITY, DEFAULT_K, THUMBS
 from .indexer import jobs, worker
 from .search import Searcher
@@ -68,6 +68,10 @@ class IngestReq(BaseModel):
 class PlanReq(BaseModel):
     script: str
     wpm: int = 150
+    use_truth: bool = True
+    use_cuts: bool = True
+    cut_weight: float | None = None
+    today: str | None = None            # ISO date to evaluate "today/this week" against (demo + tests)
 
 
 class ExportReq(BaseModel):
@@ -131,7 +135,8 @@ def make_plan(req: PlanReq):
     if not req.script.strip():
         raise HTTPException(400, "empty script")
     t0 = time.perf_counter()
-    out = planner.plan(state["search"], req.script, wpm=req.wpm)
+    out = planner.plan(state["search"], req.script, wpm=req.wpm, use_truth=req.use_truth, today=req.today,
+                       use_cuts=req.use_cuts, cut_weight=req.cut_weight)
     out["took_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     return out
 
@@ -173,6 +178,19 @@ def shot(shot_id: int):
     d["file"] = Path(d["path"]).name if d.get("path") else None
     d.pop("path", None)
     return d
+
+
+@app.get("/api/shots/{shot_id}/provenance")
+def provenance(shot_id: int):
+    """What we know about where/when this shot was made, and how we know it."""
+    f = truth.fetch_facts([shot_id]).get(shot_id)
+    if f is None:
+        raise HTTPException(404)
+    ev = truth.place_evidence(f)
+    return {"source": f["source"], "date": f["shot_date"], "date_source": f["date_source"],
+            "place_evidence": ev, "ocr_text": f["ocr_text"], "gps": [f["gps_lat"], f["gps_lon"]]
+            if f["gps_lat"] is not None else None, "weather": f["weather"], "weather_conf": f["weather_conf"],
+            "title": f["title"]}
 
 
 @app.get("/media/thumb/{shot_id}")

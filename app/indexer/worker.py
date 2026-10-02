@@ -34,6 +34,13 @@ def run_job(job) -> dict:
 
 
 STAGE_HANDLERS = {}
+try:                                    # OCR needs rapidocr-onnxruntime; indexing still works without it
+    from . import ocr as _ocr
+    STAGE_HANDLERS[jobs.STAGE_OCR] = _ocr.run
+except ImportError:
+    pass
+from . import cutfeat as _cutfeat
+STAGE_HANDLERS[jobs.STAGE_CUTFEAT] = _cutfeat.run
 
 
 def drain(verbose=True) -> int:

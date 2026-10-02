@@ -13,7 +13,7 @@ from PIL import Image
 
 from .. import db, media, models, store
 from ..config import (CUT_SIM, EMBED_BATCH, SAMPLE_EVERY_S, THUMB_W, THUMBS, WINDOW_S)
-from . import tags
+from . import jobs, tags
 
 
 class Segmenter:
@@ -146,7 +146,7 @@ def index_file(file_id: int) -> dict:
 
     E = np.stack([s["emb"] for s in shots])
     size_l, _ = tags.zero_shot(E, "size")
-    wx_l, _ = tags.zero_shot(E, "weather")
+    wx_l, wx_c = tags.zero_shot(E, "weather")
     dp_l, _ = tags.zero_shot(E, "daypart")
     se_l, _ = tags.zero_shot(E, "season")
     orient = tags.orientation(info["width"], info["height"])
@@ -158,10 +158,10 @@ def index_file(file_id: int) -> dict:
             mscore, mlevel = tags.motion_level(s["greys"])
             cur = c.execute(
                 """INSERT INTO shots(file_id,t_start,t_end,emb_row,size_tag,motion,motion_score,orientation,
-                                     weather,daypart,season,quality)
-                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                     weather,daypart,season,quality,weather_conf)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (file_id, s["t_start"], min(s["t_end"], info["duration"] or s["t_end"]), start_row + k,
-                 size_l[k], mlevel, mscore, orient, wx_l[k], dp_l[k], se_l[k], _blur(s["jpg"])))
+                 size_l[k], mlevel, mscore, orient, wx_l[k], dp_l[k], se_l[k], _blur(s["jpg"]), wx_c[k]))
             sid = cur.lastrowid
             (THUMBS / f"{sid}.jpg").write_bytes(s["jpg"])
             c.execute("UPDATE shots SET thumb=? WHERE id=?", (f"{sid}.jpg", sid))
@@ -177,6 +177,8 @@ def index_file(file_id: int) -> dict:
         raise
     if f["stock_id"]:
         _adopt_stock(file_id, f["stock_id"])
+    jobs.enqueue("file", file_id, jobs.STAGE_OCR, priority=8)   # signboard OCR runs after everything is searchable
+    jobs.enqueue("file", file_id, jobs.STAGE_CUTFEAT, priority=9)  # cut features after OCR
     db.bump_version()
     return {"shots": len(shots), "status": "ok"}
 

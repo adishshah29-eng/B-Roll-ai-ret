@@ -105,6 +105,7 @@ function openModal(s) {
       s.file_id = r.file_id; load.hidden = true; openModal(s);
     } catch (e) { load.textContent = "Can't load: " + e.message.slice(0, 60); }
   };
+  loadProvenance(s);
   const link = $("#srcLink");
   link.hidden = !s.page_url; if (s.page_url) link.href = s.page_url;
   $("#info").replaceChildren(el("b", {}, s.file), ` · ${fmt(s.t_start)}–${fmt(s.t_end)} · ${SIZE_NAMES[s.size] || s.size} · ${s.motion} · ${s.orientation} · relevance ${s.score.toFixed(3)}`);
@@ -159,28 +160,113 @@ $("#planBtn").addEventListener("click", async () => {
   if (!script) return;
   $("#planBtn").disabled = true;
   try {
-    PLAN = await api("/api/plan", { script });
+    const mode = $("#cutMode").value;
+    PLAN = await api("/api/plan", { script, use_truth: $("#truthOn").checked, use_cuts: mode !== "greedy", cut_weight: mode === "smooth" ? 0.8 : null });
     renderPlan();
+    renderSeqSummary();
+    $("#playSeqBtn").disabled = !PLAN.beats.some((x) => x.chosen.length);
     $("#planMeta").textContent = `${PLAN.beats.length} beats · planned in ${PLAN.took_ms} ms`;
     document.querySelectorAll(".export").forEach((b) => (b.disabled = !PLAN.beats.some((x) => x.chosen.length)));
   } catch (e) { $("#plan").replaceChildren(el("div", { class: "err" }, e.message)); }
   $("#planBtn").disabled = false;
 });
 
+const ICON = { ok: "✓", unverified: "?", warn: "!", bad: "✕" };
+const STATUS_TEXT = { ok: "Verified", unverified: "Unverified", warn: "Check label", bad: "Contradicts" };
+
+const CUT_CHIPS = {
+  "progress": ["good", "✓ size progression"], "jump": ["bad", "⚠ jump cut"], "flip": ["bad", "⚠ direction flip"],
+  "exposure": ["bad", "⚠ brightness jump"], "colour": ["bad", "⚠ colour shift"], "same-size": ["", "= same shot size"],
+};
+
+function cutChips(s) {
+  if (!s.cut) return "";
+  const chips = s.cut.flags.filter((f) => CUT_CHIPS[f]).map((f) => el("span", { class: "cc " + CUT_CHIPS[f][0] }, CUT_CHIPS[f][1]));
+  return el("div", { class: "cutchips", title: "How this clip cuts from the previous one" },
+    chips.length ? chips : el("span", { class: "cc good" }, "✓ clean cut"));
+}
+
+function renderSeqSummary() {
+  const box = $("#seqSummary");
+  box.replaceChildren();
+  const q = PLAN.sequence;
+  if (!q) return;
+  const mine = q.mode === "cuts" ? q.cuts : q.greedy, other = q.mode === "cuts" ? q.greedy : q.cuts;
+  const metric = (label, key, lowerIsBetter) => {
+    const a = mine[key], b = other[key];
+    const good = q.mode === "cuts" && (lowerIsBetter ? a < b : a > b);
+    return el("span", { class: "m" + (good ? " good" : "") }, el("span", { class: "t" }, label), el("b", {}, a),
+      q.mode === "cuts" ? el("span", { class: "vs" }, `(relevance-only: ${b})`) : "");
+  };
+  box.append(el("div", { class: "seqsum" },
+    el("b", {}, q.mode === "cuts" ? "Cut-aware sequence" : "Relevance-only sequence"),
+    metric("problems", "problems", true), metric("same-size repeats", "same_size", true),
+    metric("size progressions", "progress", false),
+    el("span", { class: "m" }, el("span", { class: "t" }, "relevance"), el("b", {}, mine.mean_rel.toFixed(3)),
+      q.mode === "cuts" ? el("span", { class: "vs" }, `(relevance-only: ${other.mean_rel.toFixed(3)})`) : "")));
+}
+
+function verdictBlock(s) {
+  const v = s.verdict;
+  if (!v) return cutChips(s);
+  const rows = Object.entries(v.checks || {}).map(([k, c]) =>
+    el("li", {}, el("span", { class: "ic " + c.status }, ICON[c.status]), el("span", {}, c.evidence)));
+  return el("div", { class: "vblock" },
+    cutChips(s),
+    el("div", { class: "vhead" },
+      el("span", { class: "pill st-" + v.status }, `${ICON[v.status]} ${STATUS_TEXT[v.status]}`),
+      s.label ? el("span", { class: "labelpill", title: "Added automatically to the export as a caption" }, s.label) : ""),
+    rows.length ? el("ul", { class: "checks" }, rows) : "");
+}
+
+function claimChips(b) {
+  const c = b.claims;
+  if (!c) return "";
+  const chips = [];
+  if (c.places.length) {
+    chips.push(el("span", { class: "claim" + (c.place_inherited ? " inh" : ""), title: c.place_inherited ? "carried over from an earlier line" : "" },
+      "📍 " + c.places[0] + (c.place_inherited ? " (context)" : "")));
+  }
+  if (c.time) chips.push(el("span", { class: "claim" }, "🕒 " + c.time));
+  if (c.weather) chips.push(el("span", { class: "claim" }, "🌦 " + c.weather));
+  return chips.length ? el("div", { class: "claims" }, chips) : "";
+}
+
 function renderPlan() {
   const root = $("#plan");
   root.replaceChildren();
   PLAN.beats.forEach((b, bi) => {
+    const none = b.n_rejected
+      ? `No truthful shot found — ${b.n_rejected} candidate(s) contradict the narration (see below).`
+      : "No relevant shot found for this line.";
     const chosen = el("div", { class: "chosen" }, b.chosen.length
-      ? b.chosen.map((s) => card(s, false))
-      : el("div", { class: "nomatch" }, "No relevant shot found for this line."));
+      ? b.chosen.map((s) => el("div", { class: "chosen-item" }, card(s, false), verdictBlock(s)))
+      : el("div", { class: "nomatch" }, none));
     const alts = el("div", { class: "alts" }, b.alts.map((s) =>
-      el("div", { class: "alt", title: `${s.file} · score ${s.score}`, onclick: () => swap(bi, s.id) },
-        el("img", { src: s.thumb, loading: "lazy", alt: "" }), el("span", {}, s.score.toFixed(2)))));
+      el("div", { class: "alt", title: `${s.file} · score ${s.score}${s.verdict ? " · " + STATUS_TEXT[s.verdict.status] : ""}`, onclick: () => swap(bi, s.id) },
+        el("img", { src: s.thumb, loading: "lazy", alt: "" }), el("span", {}, s.score.toFixed(2)),
+        s.verdict ? el("i", { class: "dot " + s.verdict.status }) : "")));
+    const rej = b.n_rejected ? el("details", { class: "rejected" },
+      el("summary", {}, `${b.n_rejected} shot${b.n_rejected > 1 ? "s" : ""} rejected — contradict the narration`),
+      b.rejected.map((s) => el("div", { class: "rej-item" },
+        el("img", { src: s.thumb, alt: "" }),
+        el("div", { class: "why" }, el("b", {}, s.file), el("br"), s.verdict.evidence[0]),
+        el("button", { class: "ghost", title: "Use it anyway; you take responsibility for the mismatch", onclick: () => swapRejected(bi, s.id) }, "Use anyway")))) : "";
     root.append(el("div", { class: "beat" },
-      el("div", { class: "bt" }, el("div", { class: "no" }, `Beat ${bi + 1} · ${b.dur.toFixed(1)} s`), el("div", { class: "txt" }, b.text)),
-      el("div", {}, chosen, b.alts.length ? el("div", { class: "alts-label" }, "Alternatives — click to swap") : "", alts)));
+      el("div", { class: "bt" }, el("div", { class: "no" }, `Beat ${bi + 1} · ${b.dur.toFixed(1)} s`), el("div", { class: "txt" }, b.text), claimChips(b)),
+      el("div", {}, chosen, b.alts.length ? el("div", { class: "alts-label" }, "Alternatives: click to swap") : "", alts, rej)));
   });
+}
+
+function swapRejected(bi, shotId) {
+  const b = PLAN.beats[bi];
+  const k = b.rejected.findIndex((s) => s.id === shotId);
+  if (k < 0) return;
+  const picked = b.rejected.splice(k, 1)[0];
+  b.n_rejected -= 1;
+  if (b.chosen.length) b.alts.unshift(b.chosen[0]);
+  b.chosen[0] = picked;
+  renderPlan();
 }
 
 function swap(bi, shotId) {
@@ -200,16 +286,87 @@ document.querySelectorAll(".export").forEach((btn) => btn.addEventListener("clic
   const skipped = +(r.headers.get("X-Epoch-Skipped") || 0);
   if (skipped) {
     let why = "";
-    try { why = JSON.parse(r.headers.get("X-Epoch-Skipped-Detail")).map((k) => `Beat ${k.beat + 1}: ${k.file} — ${k.reason}`).join("
-"); } catch {}
-    alert(`${skipped} clip(s) could not be added to the export:
-
-${why}
-
-Swap them for another shot and export again.`);
+    try { why = JSON.parse(r.headers.get("X-Epoch-Skipped-Detail")).map((k) => `Beat ${k.beat + 1}: ${k.file} — ${k.reason}`).join("\n"); } catch {}
+    alert(`${skipped} clip(s) could not be added to the export:\n\n${why}\n\nSwap them for another shot and export again.`);
   }
   const blob = await r.blob();
   const name = (r.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/)?.[1] || "export.txt";
   const a = el("a", { href: URL.createObjectURL(blob), download: name });
   document.body.append(a); a.click(); a.remove();
 }));
+
+async function loadProvenance(s) {
+  const box = $("#prov");
+  box.replaceChildren();
+  try {
+    const p = await api(`/api/shots/${s.id}/provenance`);
+    const rows = [];
+    rows.push(el("div", { class: "row2" }, el("b", {}, "Source: "), p.source,
+      p.date ? [" · ", el("b", {}, "date: "), p.date.slice(0, 10), ` (${p.date_source})`] : " · date unknown"));
+    rows.push(el("div", { class: "row2" }, el("b", {}, "Place: "),
+      p.place_evidence.length ? p.place_evidence.map((e) => `${e.name} (${e.text})`).join(" · ") : "no evidence in the footage"));
+    if (p.ocr_text) rows.push(el("div", { class: "row2" }, el("b", {}, "Text on screen: "), p.ocr_text));
+    if (p.weather) rows.push(el("div", { class: "row2" }, el("b", {}, "Looks: "), p.weather + (p.weather_conf ? " (" + p.weather_conf.toFixed(2) + ")" : "")));
+    box.append(el("div", { class: "prov" }, rows));
+  } catch (e) { /* provenance is optional */ }
+}
+
+// ---------- sequence preview: play the chosen clips back to back ----------
+let seqToken = 0;
+async function playSequence() {
+  if (!PLAN) return;
+  const items = PLAN.beats.flatMap((b) => b.chosen.map((s) => ({ s, per: b.dur / b.chosen.length, text: b.text })));
+  if (!items.length) return;
+  const token = ++seqToken;
+  const vid = $("#seqVideo"), img = $("#seqImg");
+  $("#seqModal").hidden = false;
+  // stock clips are only thumbnails until downloaded: fetch them now (15 s cap each, still image if it fails)
+  const need = items.filter((x) => x.s.file_id == null && x.s.stock_id != null);
+  if (need.length) {
+    let done = 0;
+    $("#seqCount").textContent = "Preparing clips…";
+    $("#seqImg").style.display = "block"; vid.style.display = "none"; img.src = need[0].s.thumb;
+    await Promise.all(need.map(async (x) => {
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 15000);
+        const r = await fetch(`/api/shots/${x.s.id}/hydrate`, { method: "POST", signal: ctl.signal });
+        clearTimeout(timer);
+        if (r.ok) x.s.file_id = (await r.json()).file_id;
+      } catch { /* keep the still image */ }
+      $("#seqCap").textContent = `${++done}/${need.length} clips downloaded`;
+    }));
+    if (token !== seqToken) return;
+  }
+  const total = items.reduce((a, x) => a + x.per, 0);
+  let elapsed = 0;
+  for (let i = 0; i < items.length && token === seqToken; i++) {
+    const { s, per, text } = items[i];
+    $("#seqCount").textContent = `Clip ${i + 1}/${items.length}`;
+    $("#seqCap").replaceChildren(text + (s.label ? "  [" + s.label + "]" : ""));
+    let played = false;
+    if (s.file_id != null) {
+      vid.style.display = "block"; img.style.display = "none";
+      vid.src = `/media/video/${s.file_id}`;
+      try {
+        await new Promise((res, rej) => { vid.onloadedmetadata = res; vid.onerror = rej; setTimeout(rej, 4000); });
+        vid.currentTime = s.trim_in != null ? s.trim_in : s.t_start;
+        for (let attempt = 0; attempt < 3 && !played; attempt++) {     // play() can be aborted transiently (e.g. hidden tab)
+          try { await vid.play(); played = true; } catch { await new Promise((r) => setTimeout(r, 300)); }
+        }
+      } catch { played = false; }
+    }
+    if (!played) { vid.pause(); vid.style.display = "none"; img.style.display = "block"; img.src = s.thumb; }
+    const t0 = performance.now();
+    while (token === seqToken && performance.now() - t0 < per * 1000) {
+      $("#seqFill").style.width = `${((elapsed + (performance.now() - t0) / 1000) / total) * 100}%`;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    elapsed += per;
+  }
+  if (token === seqToken) { vid.pause(); $("#seqModal").hidden = true; }
+}
+function stopSequence() { seqToken++; $("#seqVideo").pause(); $("#seqModal").hidden = true; }
+$("#playSeqBtn").addEventListener("click", playSequence);
+$("#seqClose").addEventListener("click", stopSequence);
+$("#seqModal").addEventListener("click", (e) => e.target.id === "seqModal" && stopSequence());

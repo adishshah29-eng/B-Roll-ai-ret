@@ -13,6 +13,8 @@ Humans and AI agents both read from here.
 | [05-environment.md](05-environment.md) | Machine facts, setup commands, gotchas | Something breaks |
 | [06-demo-script.md](06-demo-script.md) | Exact demo flow + backup plan | Before rehearsal |
 | [07-progress-log.md](07-progress-log.md) | Live checklist + timestamps | Every 20–30 min |
+| [10-cuts.md](10-cuts.md) | CUTS pillar as built: transition terms, optimiser, measured weights, limits | CUTS logic changes |
+| [09-truth.md](09-truth.md) | TRUE pillar as built: verdict rules, thresholds, traps, known limits | TRUE logic changes |
 | [08-sources.md](08-sources.md) | Own footage + Pexels/Pixabay/Commons/Archive; tiers, lazy hydration, licences | A source is added |
 
 Long-form docs: [problem statement](../FINAL_PROBLEM_STATEMENT.md) · [full system design](../docs/design/broll-search.md) (the v1 design; the 3-hour build is a subset of it).

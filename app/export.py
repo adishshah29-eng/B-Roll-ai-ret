@@ -49,7 +49,7 @@ def _clips_from_beats(beats: list, skipped: list | None = None) -> list:
                 continue
             # fill the beat from the source: extend past the shot into the same take, or slide back if at the end
             fd = row["duration"] or (s["t_end"] + per)
-            src_in = s["t_start"]
+            src_in = s["trim_in"] if s.get("trim_in") is not None else s["t_start"]
             if src_in + per > fd:
                 src_in = max(0.0, fd - per)
             src_out = min(fd, src_in + per)

@@ -13,6 +13,8 @@ weather:
   fog: ["a foggy misty scene", "morning fog and haze"]
   snow: ["a snowy scene with snow falling"]
   night: ["a scene at night with lights", "a dark night time street"]
+  indoor: ["an indoor scene inside a room or building", "people working in an office at a desk", "a close-up of food or an object on a table",
+           "a close-up shot with no visible sky", "a studio shot with artificial lighting", "a kitchen or restaurant interior"]
 daypart:
   morning: ["early morning light at sunrise", "a morning scene with soft golden light"]
   day: ["a scene in bright midday daylight"]

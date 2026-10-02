@@ -63,12 +63,20 @@
     <div class="script-actions">
       <button id="planBtn" class="primary">Plan B-roll</button>
       <button id="sampleBtn" class="ghost">Load sample script</button>
+      <label class="toggle" title="How the sequence is chosen"><select id="cutMode">
+        <option value="balanced" selected>Cut-aware: balanced</option>
+        <option value="smooth">Cut-aware: smoothest</option>
+        <option value="greedy">Relevance only</option>
+      </select></label>
+      <label class="toggle" title="Check every shot against the claims in the narration: place, date, weather"><input type="checkbox" id="truthOn" checked> Check footage against narration</label>
       <span class="spacer"></span>
       <span id="planMeta" class="meta"></span>
+      <button id="playSeqBtn" class="ghost" disabled>▶ Play sequence</button>
       <button class="ghost export" data-fmt="xml" disabled>Export XML (Premiere / Resolve)</button>
       <button class="ghost export" data-fmt="edl" disabled>EDL</button>
       <button class="ghost export" data-fmt="credits" disabled>Credits</button>
     </div>
+    <div id="seqSummary"></div>
     <div id="plan"></div>
   </section>
 </main>
@@ -78,7 +86,17 @@
     <button class="close" id="modalClose" aria-label="Close">×</button>
     <div class="player"><video id="player" controls playsinline></video><img id="playerThumb" alt=""></div>
     <div class="info" id="info"></div>
+    <div id="prov"></div>
     <div class="modal-actions"><button id="simBtn" class="primary">Find similar</button><button id="loadBtn" class="ghost" hidden>Load video</button><a id="srcLink" class="ghost link" target="_blank" rel="noopener" hidden>Source page</a></div>
+  </div>
+</div>
+
+<div id="seqModal" class="modal" hidden>
+  <div class="modal-body">
+    <button class="close" id="seqClose" aria-label="Close">×</button>
+    <div class="player"><video id="seqVideo" muted playsinline></video><img id="seqImg" alt=""></div>
+    <div class="info"><b id="seqCount"></b> <span id="seqCap"></span></div>
+    <div class="seqbar"><div id="seqFill"></div></div>
   </div>
 </div>
 

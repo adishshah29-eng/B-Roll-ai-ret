@@ -93,7 +93,7 @@ def process_items(items: list, S: np.ndarray):
     E = E[keep]
     ok = [ok[k] for k in keep]
     size_l, _ = tags.zero_shot(E, "size")
-    wx_l, _ = tags.zero_shot(E, "weather")
+    wx_l, wx_c = tags.zero_shot(E, "weather")
     dp_l, _ = tags.zero_shot(E, "daypart")
     se_l, _ = tags.zero_shot(E, "season")
 
@@ -115,11 +115,11 @@ def process_items(items: list, S: np.ndarray):
                 continue
             stock_id = cur.lastrowid
             sh = c.execute(
-                """INSERT INTO shots(stock_id,t_start,t_end,emb_row,size_tag,motion,orientation,weather,daypart,season)
-                   VALUES(?,?,?,?,?,'unknown',?,?,?,?)""",
+                """INSERT INTO shots(stock_id,t_start,t_end,emb_row,size_tag,motion,orientation,weather,daypart,season,weather_conf)
+                   VALUES(?,?,?,?,?,'unknown',?,?,?,?,?)""",
                 (stock_id, 0.0, it.duration or 0.0, start + k, size_l[k],
                  tags.orientation(it.width, it.height) if it.width and it.height else "16:9",
-                 wx_l[k], dp_l[k], se_l[k]))
+                 wx_l[k], dp_l[k], se_l[k], wx_c[k]))
             sid = sh.lastrowid
             (THUMBS / f"{sid}.jpg").write_bytes(_jpeg_bytes(im))
             c.execute("UPDATE shots SET thumb=? WHERE id=?", (f"{sid}.jpg", sid))

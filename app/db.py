@@ -56,7 +56,8 @@ def conn() -> sqlite3.Connection:
         c.execute("PRAGMA journal_mode=WAL")
         c.execute("PRAGMA synchronous=NORMAL")
         c.executescript(SCHEMA)
-        for ddl in ("ALTER TABLE stock_items ADD COLUMN date_kind TEXT",):   # lightweight migrations
+        for ddl in ("ALTER TABLE stock_items ADD COLUMN date_kind TEXT",
+                    "ALTER TABLE shots ADD COLUMN weather_conf REAL"):   # lightweight migrations
             try:
                 c.execute(ddl)
             except sqlite3.OperationalError:
