@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Epoch · True · Cuts · Yours</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">◐</span> Epoch <small>True · Cuts · Yours</small></div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="search" class="active">Search</button>
+    <button data-tab="script">Script</button>
+    <button data-tab="memory" disabled title="Coming in P7">Memory</button>
+  </nav>
+  <div class="status" id="status">connecting…</div>
+</header>
+
+<main>
+  <section id="tab-search" class="tab active">
+    <form id="searchForm" class="searchbar" autocomplete="off">
+      <input id="q" type="search" placeholder="Search your footage… e.g. rain on the road · बारिश में सड़क पर ट्रैफिक" autofocus>
+      <button type="submit" class="primary">Search</button>
+    </form>
+
+    <div class="controls">
+      <label class="slider" title="0 = pure relevance, 1 = maximum variety">
+        Variety <input id="div" type="range" min="0" max="1" step="0.05" value="0.3"><output id="divOut">0.30</output>
+      </label>
+      <div class="chips" id="chips">
+        <span class="chip-group">Size
+          <button class="chip" data-f="size" data-v="wide">wide</button>
+          <button class="chip" data-f="size" data-v="medium">medium</button>
+          <button class="chip" data-f="size" data-v="close">close-up</button>
+          <button class="chip" data-f="size" data-v="detail">detail</button>
+          <button class="chip" data-f="size" data-v="aerial">aerial</button>
+        </span>
+        <span class="chip-group">Motion
+          <button class="chip" data-f="motion" data-v="still">still</button>
+          <button class="chip" data-f="motion" data-v="moderate">moderate</button>
+          <button class="chip" data-f="motion" data-v="action">action</button>
+        </span>
+        <span class="chip-group">Source
+          <button class="chip" data-f="source" data-v="own">own</button>
+          <button class="chip" data-f="source" data-v="pixabay">pixabay</button>
+          <button class="chip" data-f="source" data-v="commons">commons</button>
+          <button class="chip" data-f="source" data-v="archive">archive</button>
+        </span>
+        <span class="chip-group">Format
+          <button class="chip" data-f="orientation" data-v="16:9">16:9</button>
+          <button class="chip" data-f="orientation" data-v="9:16">9:16</button>
+        </span>
+      </div>
+    </div>
+
+    <div id="meta" class="meta"></div>
+    <div id="results"></div>
+    <div id="empty" class="empty">Type a query to search your library. Hindi and English both work.</div>
+  </section>
+  <section id="tab-script" class="tab">
+    <textarea id="script" rows="6" placeholder="Paste your script — one idea per line or sentence. Hindi and English both work."></textarea>
+    <div class="script-actions">
+      <button id="planBtn" class="primary">Plan B-roll</button>
+      <button id="sampleBtn" class="ghost">Load sample script</button>
+      <span class="spacer"></span>
+      <span id="planMeta" class="meta"></span>
+      <button class="ghost export" data-fmt="xml" disabled>Export XML (Premiere / Resolve)</button>
+      <button class="ghost export" data-fmt="edl" disabled>EDL</button>
+      <button class="ghost export" data-fmt="credits" disabled>Credits</button>
+    </div>
+    <div id="plan"></div>
+  </section>
+</main>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-body">
+    <button class="close" id="modalClose" aria-label="Close">×</button>
+    <div class="player"><video id="player" controls playsinline></video><img id="playerThumb" alt=""></div>
+    <div class="info" id="info"></div>
+    <div class="modal-actions"><button id="simBtn" class="primary">Find similar</button><button id="loadBtn" class="ghost" hidden>Load video</button><a id="srcLink" class="ghost link" target="_blank" rel="noopener" hidden>Source page</a></div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

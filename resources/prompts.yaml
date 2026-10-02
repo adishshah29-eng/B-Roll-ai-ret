@@ -1,0 +1,34 @@
+# Zero-shot prompt sets (English, embedded with the CLIP text tower, argmax per group).
+# Soft signals only: TRUE never raises a hard "contradicts" from these alone.
+size:
+  wide: ["a wide establishing shot of a scene", "a landscape wide shot showing the whole environment", "a far away view of a street or city"]
+  medium: ["a medium shot of a person from the waist up", "a medium shot of a scene with people", "a mid-range shot of a subject"]
+  close: ["a close-up shot of a face or object", "a close-up of hands doing something", "a tight close-up shot"]
+  detail: ["an extreme close-up macro detail shot", "a macro shot of small details like water drops or texture"]
+  aerial: ["an aerial drone shot from above", "a top-down bird's eye view of a city", "an overhead drone view of land"]
+weather:
+  rain: ["a rainy scene with rain falling", "wet streets in heavy rain", "a stormy rainy day"]
+  sunny: ["a bright sunny day with clear sky", "a sunny scene with strong sunlight"]
+  cloudy: ["an overcast cloudy day", "a gloomy grey cloudy sky"]
+  fog: ["a foggy misty scene", "morning fog and haze"]
+  snow: ["a snowy scene with snow falling"]
+  night: ["a scene at night with lights", "a dark night time street"]
+daypart:
+  morning: ["early morning light at sunrise", "a morning scene with soft golden light"]
+  day: ["a scene in bright midday daylight"]
+  evening: ["a sunset evening scene with orange sky", "golden hour dusk lighting"]
+  night: ["a night scene lit by artificial lights", "dark night time"]
+season:
+  monsoon: ["monsoon season with dark clouds and heavy rain", "lush green wet landscape in the rainy season"]
+  summer: ["hot dry summer scene with dusty heat haze"]
+  winter: ["a cold winter scene with fog and people wearing sweaters"]
+  festive: ["a festival celebration with lights and decorations", "diwali lamps and festive lights"]
+# Place cues (visual, LOW confidence; OCR/GPS are the hard evidence)
+place_type:
+  metro_city: ["a busy metropolitan city street with high rise buildings"]
+  village: ["a rural village with fields and huts"]
+  beach: ["a beach with sea waves and sand"]
+  mountain: ["snow capped mountains or hills"]
+  temple: ["an indian temple or religious place"]
+  market: ["a crowded indian street market with stalls"]
+  station: ["a railway station with a train and platform"]

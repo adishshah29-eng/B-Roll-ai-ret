@@ -1,0 +1,17 @@
+numpy
+opencv-python
+Pillow
+scikit-learn
+scipy
+sentence-transformers
+torch
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+PyYAML
+requests
+httpx
+pytest
+# P5 (TRUE): OCR
+# easyocr

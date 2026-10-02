@@ -1,0 +1,86 @@
+# Seed queries for stock ingestion. Pixabay caps every query at 500 hits, so breadth comes from many queries.
+# India-flavoured first (the demo story), then generic B-roll staples.
+pixabay:
+  - india traffic
+  - indian street food
+  - mumbai
+  - delhi
+  - india market
+  - indian village
+  - monsoon rain india
+  - rain street
+  - flooded street
+  - local train
+  - railway station
+  - auto rickshaw
+  - chai tea
+  - temple india
+  - diwali festival
+  - indian wedding
+  - taj mahal
+  - ganges river
+  - farmer field
+  - tractor farm
+  - city traffic night
+  - aerial city
+  - drone skyline
+  - sunset city
+  - sunrise
+  - people walking street
+  - crowd
+  - office laptop
+  - business meeting
+  - typing keyboard
+  - students classroom
+  - children playing
+  - doctor hospital
+  - construction site
+  - factory workers
+  - solar panels
+  - wind turbine
+  - smartphone
+  - cooking kitchen
+  - street vendor
+  - vegetables market
+  - beach waves
+  - waterfall
+  - mountains clouds
+  - forest
+  - river
+  - birds flying
+  - flowers
+  - fireworks
+  - yoga
+  - cricket
+  - cycling
+  - bus
+  - highway
+  - bridge
+  - fog
+  - clouds timelapse
+  - lightning storm
+  - water drops
+commons:
+  - India street
+  - Mumbai
+  - Delhi
+  - Kolkata
+  - Chennai
+  - Bangalore
+  - India market
+  - India traffic
+  - India monsoon
+  - India festival
+  - India railway
+  - India village
+  - Ganges
+  - Rajasthan
+  - Kerala
+archive:
+  - India
+  - Bombay
+  - Delhi
+  - Calcutta
+  - monsoon
+  - Himalaya
+  - Indian
