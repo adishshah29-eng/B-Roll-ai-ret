@@ -14,6 +14,15 @@ from . import analyse
 
 HOOK_S = 3.0            # never cover the opening hook: the speaker introduces themselves
 MIN_SLOT, MAX_SLOT = 1.5, 5.0
+
+
+def hook_s(duration: float) -> float:
+    """Opening seconds left uncovered: 3 s on a normal video, but never more than 10 % of a short one."""
+    return round(min(HOOK_S, max(0.5, 0.1 * (duration or 0))), 2)
+
+
+def min_slot(duration: float) -> float:
+    return 1.0 if (duration or 0) < 20 else MIN_SLOT
 TARGET_COVER = 0.45     # share of runtime covered by B-roll (rules)
 GAP_S = 0.6             # keep at least this much A-roll between slots
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -48,18 +57,18 @@ def _visual_score(text: str) -> float:
 
 
 def rule_slots(segments: list, duration: float, fmap: list) -> list:
-    cands = []
+    cands, hook, mn = [], hook_s(duration), min_slot(duration)
     for s in segments:
-        a, b = max(s["start"], HOOK_S), s["end"]
-        if b - a < MIN_SLOT:
+        a, b = max(s["start"], hook), s["end"]
+        if b - a < mn:
             continue
         a2, b2 = a + 0.2, min(b - 0.1, a + 0.2 + MAX_SLOT)       # short lead-in so the cut lands after the word starts
-        if b2 - a2 < MIN_SLOT:
+        if b2 - a2 < mn:
             continue
         score = _visual_score(s["text"]) - 0.5 * analyse.face_share(fmap, a2, b2)
         cands.append({"start": round(a2, 2), "end": round(b2, 2), "text": s["text"], "query": s["text"],
                       "score": score, "reason": "visual line" if score > 0 else "keeps the pace"})
-    budget = TARGET_COVER * max(duration - HOOK_S, 1.0)
+    budget = TARGET_COVER * max(duration - hook, 1.0)
     chosen, used = [], 0.0
     for c in sorted(cands, key=lambda c: -c["score"]):
         if used >= budget:
@@ -100,7 +109,7 @@ def gemini_slots(segments: list, duration: float) -> list | None:
         txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
         raw = json.loads(txt).get("slots", [])
     except Exception as e:
-        print("gemini slot picker failed, using rules:", e)
+        print("gemini slot picker failed, using rules:", re.sub(r"key=[^&\s]+", "key=<redacted>", str(e)))
         return None
     out = []
     for x in raw:

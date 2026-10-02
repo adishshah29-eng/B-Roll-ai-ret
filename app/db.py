@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS memory_pairs(
   id INTEGER PRIMARY KEY, project TEXT, text TEXT, shot_id INT, label INT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS usage(shot_id INT, project TEXT, used_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS libraries(
+  id INTEGER PRIMARY KEY, name TEXT UNIQUE, domain TEXT, description TEXT, kind TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS ix_shots_file ON shots(file_id);
 CREATE INDEX IF NOT EXISTS ix_shots_stock ON shots(stock_id);
 CREATE INDEX IF NOT EXISTS ix_shots_tags ON shots(size_tag, motion, orientation);
@@ -57,7 +60,11 @@ def conn() -> sqlite3.Connection:
         c.execute("PRAGMA synchronous=NORMAL")
         c.executescript(SCHEMA)
         for ddl in ("ALTER TABLE stock_items ADD COLUMN date_kind TEXT",
-                    "ALTER TABLE shots ADD COLUMN weather_conf REAL"):   # lightweight migrations
+                    "ALTER TABLE shots ADD COLUMN weather_conf REAL",
+                    "ALTER TABLE files ADD COLUMN library_id INT",
+                    "ALTER TABLE stock_items ADD COLUMN library_id INT",
+                    "CREATE INDEX IF NOT EXISTS ix_files_lib ON files(library_id)",
+                    "CREATE INDEX IF NOT EXISTS ix_stock_lib ON stock_items(library_id)"):   # lightweight migrations
             try:
                 c.execute(ddl)
             except sqlite3.OperationalError:

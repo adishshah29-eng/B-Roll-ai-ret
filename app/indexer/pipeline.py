@@ -177,7 +177,8 @@ def index_file(file_id: int) -> dict:
         raise
     if f["stock_id"]:
         _adopt_stock(file_id, f["stock_id"])
-    jobs.enqueue("file", file_id, jobs.STAGE_OCR, priority=8)   # signboard OCR runs after everything is searchable
+    if not f["stock_id"]:                                      # stock clips: Pixabay tags/titles already carry the place evidence, OCR is slow
+        jobs.enqueue("file", file_id, jobs.STAGE_OCR, priority=8)   # signboard OCR runs after everything is searchable
     jobs.enqueue("file", file_id, jobs.STAGE_CUTFEAT, priority=9)  # cut features after OCR
     db.bump_version()
     return {"shots": len(shots), "status": "ok"}

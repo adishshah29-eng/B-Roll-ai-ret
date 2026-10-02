@@ -1,0 +1,98 @@
+# Training lines for the offline engine's "can this line be shown?" check. Add your own lines to improve it.
+# visual = a concrete place / object / action you could film (tech lines count when they name a screen, code, server, laptop...)
+# talk   = filler, opinion, meta-talk, calls to action, abstract claims with nothing to show
+visual:
+  - Heavy rain lashed the city this week, bringing traffic to a halt.
+  - Commuters waited for hours at flooded local train stations.
+  - Street vendors covered their stalls with plastic sheets.
+  - The train to Jaipur leaves at dawn and fog sits over the fields.
+  - We walked through the spice market, colours everywhere.
+  - Waves crashed against the rocks at sunset.
+  - She stirred the hot pan while the kitchen filled with steam.
+  - Crowds filled the streets for the festival of lights.
+  - The farmer drove his tractor across the golden field.
+  - Mountains rose above the clouds as the sun came up.
+  - A cyclist rode along the empty coastal road.
+  - Students walked into the classroom with their books.
+  - Workers climbed the scaffolding of the new building.
+  - Fresh vegetables were piled high at the market.
+  - Birds took off from the lake at sunrise.
+  - Traffic crawled through the busy junction.
+  - The doctor checked the patient in the hospital corridor.
+  - Fireworks lit up the night sky over the city.
+  - A developer typed code late into the night.
+  - Programmers write code on their laptops.
+  - You write your code in an editor and run it to see the result.
+  - The server room hummed with blinking lights.
+  - She scrolled through her phone on the metro.
+  - The airport was packed with travellers dragging suitcases.
+  - A boat drifted slowly down the river at dawn.
+  - Smoke rose from the street food stall as the cook flipped the dosa.
+  - The drone flew over the palace and the old city walls.
+  - Children ran across the playground in the afternoon sun.
+  - The waiter poured hot chai into small glasses.
+  - Cars lined up at the petrol station in the rain.
+  - A woman walked through the temple courtyard carrying flowers.
+  - The camera panned across the busy railway platform.
+  - Snow covered the pine trees along the mountain road.
+  - He opened his laptop and the dashboard filled with charts.
+  - Rows of solar panels stretched across the desert.
+  - The chef chopped onions and tossed them into the pan.
+  - On screen, the code ran and the output appeared line by line.
+  - A crowd gathered around the cricket match on the street.
+  - Waterfalls crashed into the green valley below.
+  - Machines hummed on the factory floor as workers watched.
+  - Neon signs glowed over the wet street at night.
+  - The robot arm picked up the box and placed it on the belt.
+  - Tourists took photos in front of the old fort.
+  - Her fingers flew over the keyboard as she wrote the script.
+  - Sunlight filtered through the trees onto the forest trail.
+  - Python is a popular programming language used in AI and web development.
+talk:
+  - Today I want to talk about why this matters.
+  - So let's get started, and I'll explain everything step by step.
+  - I think the key idea here is consistency.
+  - Let me know in the comments what you think.
+  - Thanks so much for watching, see you in the next one.
+  - This is a really important concept to understand.
+  - The only thing that matters is how much you care.
+  - We will cover three main points today.
+  - Everyone learns at a different pace.
+  - That's why it matters so much to me personally.
+  - I'm not going to lie, this was hard for me.
+  - What do you think about that?
+  - Honestly it depends on a lot of different factors.
+  - And that's basically the whole idea in a nutshell.
+  - Before we begin, a quick word about what to expect.
+  - Hi everyone, welcome back to the channel.
+  - If you enjoyed this video, please like and subscribe.
+  - The truth is that nobody really knows the answer.
+  - You have to believe in yourself no matter what.
+  - It took me a long time to realise this.
+  - There are many reasons why people feel this way.
+  - Let's talk about what this means for you.
+  - I want to share a few thoughts before we move on.
+  - Success is really about mindset and attitude.
+  - Now, you might be wondering why that is.
+  - The important thing is to stay consistent.
+  - I'm going to be completely honest with you.
+  - Here is the thing, it is more complicated than that.
+  - Remember, everyone's journey is different.
+  - So what is the main takeaway from all of this?
+  - That is the reason it is used in so many places.
+  - It is important to understand the basics first.
+  - We will look at an example in just a moment.
+  - I hope this was helpful, and I will see you soon.
+  - There is no right or wrong way to do it.
+  - Let me explain what I mean by that.
+  - Learning takes time and patience.
+  - The difference comes down to how you think about it.
+  - Many people ask me this question all the time.
+  - This is something I feel very strongly about.
+  - Without further ado, let's dive right in.
+  - It all comes down to your priorities.
+  - Anyway, that is enough about that for now.
+  - You will see what I mean as we go along.
+  - Whatever you decide, make sure it is your choice.
+  - First, let me give you a bit of background.
+  - This concept can seem confusing at first.

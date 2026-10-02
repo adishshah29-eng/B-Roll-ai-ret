@@ -24,12 +24,18 @@
   const main = q("#edMain"), over = q("#edOver");
 
   // ---------- start screen ----------
-  j("/api/editor/config").then((c) => {
-    q("#edEngine").replaceChildren(mk("span", { class: "engine " + (c.llm === "gemini" ? "on" : "") }, c.llm === "gemini" ? `Gemini (${c.model})` : "Offline engine"),
-      c.llm === "gemini" ? " reads your script and writes the Pixabay searches."
-        : " writes the Pixabay searches from keywords. Add GEMINI_API_KEY to .env for smarter B-roll choices.",
+  q("#edEngine").replaceChildren(mk("span", { class: "meta" }, "Checking the AI engine…"));
+  j("/api/editor/config?check=1").then((c) => {
+    const g = c.gemini || {};
+    const badge = !g.enabled ? mk("span", { class: "engine" }, "Offline engine")
+      : g.ok ? mk("span", { class: "engine on" }, `Gemini (${g.model})`)
+        : mk("span", { class: "engine warn" }, "Gemini not working: offline engine");
+    const note = !g.enabled ? " writes the Pixabay searches from the concept list and skips lines with nothing to film. Add GEMINI_API_KEY to .env for much better choices."
+      : g.ok ? " reads your whole script and writes the Pixabay searches."
+        : ` ${g.error || "the key was rejected"}. The editor still works, but with weaker offline searches.`;
+    q("#edEngine").replaceChildren(badge, note,
       c.pixabay ? "" : mk("span", { style: "color:var(--bad)" }, "  Pixabay key missing: only the built-in library will be used."));
-  }).catch(() => {});
+  }).catch(() => q("#edEngine").replaceChildren(mk("span", { class: "engine warn" }, "Could not check the AI engine")));
   async function loadList() {
     try {
       const ps = await j("/api/editor/projects");
@@ -44,6 +50,7 @@
     if (!f) { q("#edMsg").textContent = "Choose a video first."; return; }
     const fd = new FormData();
     fd.append("file", f); fd.append("name", q("#edName").value); fd.append("script", q("#edScript").value);
+    fd.append("library", q("#edLib").value || "0"); fd.append("live", q("#edLive").checked ? "1" : "");
     q("#edUpload").disabled = true; q("#edMsg").textContent = "Uploading…";
     try {
       const { id } = await j("/api/editor/projects", { method: "POST", body: fd });
@@ -71,10 +78,11 @@
     q("#edStart").hidden = true; q("#edWork").hidden = false;
     q("#edTitle").textContent = p.name;
     const L = p.llm || {};
-    q("#edInfo").textContent = ` ${tc(p.duration)} · ${p.language || "?"} · ${(p.units || []).filter((u) => u.kind === "speech").length} clips · ${(p.cuts || []).length} scene cuts · ${p.live ? p.live.added : 0} new Pixabay clips`;
+    q("#edInfo").textContent = ` ${tc(p.duration)} · ${p.language || "?"} · ${(p.units || []).filter((u) => u.kind === "speech").length} clips · ${(p.cuts || []).length} scene cuts · ${p.live ? p.live.added : 0} new Pixabay clips · library: ${((window.LIBS || []).find((l) => l.id === p.library) || {}).name || "all footage"}`;
     q("#edSummary").replaceChildren(
       mk("span", { class: "engine " + (L.provider === "gemini" ? "on" : "") }, L.provider === "gemini" ? "Gemini" : "Offline engine"),
-      L.summary ? " " + L.summary : "", L.error ? mk("span", { class: "meta", style: "color:var(--warn)" }, `  (Gemini failed: ${L.error})`) : "");
+      L.summary ? " " + L.summary : "",
+      L.error ? mk("span", { class: "engine warn", style: "margin-left:8px", title: L.error }, "Gemini failed for this project: used the offline engine") : "");
     main.src = `/api/editor/projects/${id}/video`;
     q("#edOut").replaceChildren();
     renderAll();
@@ -145,14 +153,25 @@
     const sh = s.shot;
     const v = sh?.verdict;
     const left = mk("div", {},
-      sh ? mk("img", { src: sh.thumb, style: "width:100%;border-radius:8px" }) : mk("div", { class: "nomatch" }, "No clip: pick one below or delete this spot."),
+      sh ? mk("img", { src: sh.thumb, style: "width:100%;border-radius:8px" })
+        : s.suggested ? mk("div", {}, mk("img", { src: s.suggested.thumb, style: "width:100%;border-radius:8px;opacity:.6" }),
+            mk("div", { class: "nomatch" }, `No confident match (best guess scored ${s.suggested.score.toFixed(2)}, ${s.suggested.file}). Left empty so a wrong clip is not forced in.`),
+            mk("div", { class: "acts" }, mk("button", { class: "ghost", onclick: () => swap(s.suggested) }, "Use this guess anyway")))
+        : mk("div", { class: "nomatch" }, "No clip: pick one below, search Pixabay with another query, or delete this spot."),
       sh ? mk("div", { class: "meta" }, `${sh.file} · ${sh.source}${sh.licence ? " · " + sh.licence.label : ""}`) : "",
       v ? mk("div", { class: "vhead", style: "margin-top:6px" }, mk("span", { class: "pill st-" + v.status }, v.status), sh.label ? mk("span", { class: "labelpill" }, sh.label) : "") : "",
       sh?.why ? mk("ul", { class: "why" }, sh.why.map((w) => mk("li", {}, w))) : "");
     const qin = mk("input", { value: s.query || s.text });
     const right = mk("div", {},
-      mk("div", {}, mk("b", {}, `${tc(s.start)} – ${tc(s.end)}`), mk("span", { class: "meta" }, `  ${s.reason || ""}`)),
+      mk("div", {}, mk("b", {}, `${tc(s.start)} – ${tc(s.end)}`), mk("span", { class: "meta" }, `  ${s.reason || ""}${s.anchor ? `  Cut starts on “${s.anchor}”.` : ""}`)),
       mk("div", { class: "meta", style: "margin:4px 0" }, `“${s.text}”`),
+      s.judge ? mk("div", { class: "meta", style: "margin:4px 0" },
+        mk("span", { class: "engine " + (s.judge.good ? "on" : "warn") }, s.judge.good ? `Gemini checked the pictures: ${s.judge.good} of ${s.judge.of} fit` : "Gemini: none of these fit"),
+        s.judge.reason ? ` ${s.judge.reason}` : "") : "",
+      s.repaired ? mk("div", { class: "meta", style: "margin:4px 0" }, "The first search found nothing that fit, so Gemini rewrote it and searched again.") : "",
+      s.inpoint ? mk("div", { class: "meta", style: "margin:4px 0" },
+        s.inpoint.fits ? `Clip starts ${s.inpoint.at.toFixed(1)} s in: the best of ${s.inpoint.windows} moments for this line.`
+          : `No moment of this clip clearly shows the line (${s.inpoint.windows} checked). Consider swapping it.`) : "",
       mk("div", { class: "alts-label" }, "Search query sent to Pixabay (edit it, or pick another phrasing)"),
       qin,
       mk("div", { class: "qchips" }, [s.query, ...(s.alt_queries || [])].filter((x, i, a) => x && a.indexOf(x) === i).map((x) =>
@@ -188,7 +207,7 @@
     const s = E.proj.slots[E.sel];
     const old = s.shot;
     s.alts = [old, ...s.alts.filter((x) => x.id !== a.id)].filter(Boolean);
-    s.shot = a; s.locked = true;
+    s.shot = a; s.locked = true; s.suggested = null;
     await save(false);
     if (typeof teach === "function") teach(s.text, a, old ? [old.id] : []);     // the swap teaches Edit Memory
   }
@@ -264,4 +283,7 @@
   });
 
   loadList();
+  q("#tabs [data-tab=editor]").addEventListener("click", loadList);        // the list reflects projects made since the page loaded
+  const m = location.hash.match(/^#editor\/([\w-]+)/);                     // a link straight to a project
+  if (m) open(m[1]).catch(() => {});
 })();

@@ -51,6 +51,7 @@ class Snapshot:
     orient: np.ndarray
     source: np.ndarray       # 'own' | 'stock' | 'archive' | ...
     lic: np.ndarray          # licence class: own | safe | attribution | caution | restricted | unknown
+    lib: np.ndarray          # library id (0 = not in any library)
     index_of: dict           # shot id -> row in E
 
     def __len__(self):
@@ -62,16 +63,18 @@ def build_snapshot() -> Snapshot:
     ver = db.get_version()
     rows = c.execute(
         """SELECT s.id, s.file_id, s.stock_id, s.t_start, s.t_end, s.emb_row,
-                  s.size_tag, s.motion, s.orientation, si.source AS src, si.licence AS lic_text, si.licence_url AS lic_url
+                  s.size_tag, s.motion, s.orientation, si.source AS src, si.licence AS lic_text, si.licence_url AS lic_url,
+                  COALESCE(f.library_id, si.library_id, 0) AS lib
            FROM shots s
            LEFT JOIN stock_items si ON si.id = s.stock_id
+           LEFT JOIN files f ON f.id = s.file_id
            WHERE s.active=1 AND s.emb_row IS NOT NULL ORDER BY s.id"""
     ).fetchall()
     M = load_matrix()
     if not rows:
         z = np.zeros(0)
         return Snapshot(ver, np.zeros((0, EMB_DIM), np.float32), z.astype(int), z.astype(int), z.astype(int),
-                        z, z, z.astype("U1"), z.astype("U1"), z.astype("U1"), z.astype("U1"), z.astype("U1"), {})
+                        z, z, z.astype("U1"), z.astype("U1"), z.astype("U1"), z.astype("U1"), z.astype("U1"), z.astype(int), {})
     emb_rows = np.array([r["emb_row"] for r in rows])
     valid = emb_rows < len(M)
     rows = [r for r, v in zip(rows, valid) if v]
@@ -90,6 +93,7 @@ def build_snapshot() -> Snapshot:
         orient=np.array([r["orientation"] or "unknown" for r in rows]),
         source=np.array([r["src"] or "own" for r in rows]),
         lic=np.array([licence.classify(r["lic_text"], r["lic_url"], r["src"]) for r in rows]),
+        lib=np.array([r["lib"] for r in rows], dtype=int),
         index_of={int(i): k for k, i in enumerate(ids)},
     )
 

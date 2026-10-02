@@ -71,7 +71,7 @@ def _fetch_preview(item):
         return None
 
 
-def process_items(items: list, S: np.ndarray):
+def process_items(items: list, S: np.ndarray, library_id: int | None = None):
     """items: new StockItems (already filtered for existence). Returns (n_added, updated S)."""
     with ThreadPoolExecutor(8) as ex:
         imgs = list(ex.map(_fetch_preview, items))
@@ -106,11 +106,11 @@ def process_items(items: list, S: np.ndarray):
             cur = c.execute(
                 """INSERT OR IGNORE INTO stock_items(source,source_id,title,tags,author,author_url,page_url,licence,
                    licence_url,published_at,date_kind,gps_lat,gps_lon,duration,width,height,preview_urls,renditions,
-                   fetched_at,tier) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'S')""",
+                   fetched_at,library_id,tier) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'S')""",
                 (it.source, it.source_id, it.title, it.tags, it.author, it.author_url, it.page_url, it.licence,
                  it.licence_url, it.published_at, it.date_kind, it.gps[0] if it.gps else None,
                  it.gps[1] if it.gps else None, it.duration, it.width, it.height,
-                 json.dumps([it.preview_url]), json.dumps(it.renditions), now))
+                 json.dumps([it.preview_url]), json.dumps(it.renditions), now, library_id))
             if cur.rowcount == 0:
                 continue
             stock_id = cur.lastrowid

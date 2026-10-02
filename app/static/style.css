@@ -225,3 +225,17 @@ a.link { text-decoration: none; display: inline-flex; align-items: center; heigh
 .qchip { height: 24px; padding: 0 9px; font: 11.5px var(--mono); color: var(--muted); }
 .qchip.on { color: var(--bg); background: var(--text); border-color: var(--text); }
 .meta.busy { color: var(--warn); }
+
+/* Libraries */
+.libpick { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.libmodes { display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+.libmodes label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+#libList .librow { display: grid; grid-template-columns: minmax(180px, 1.2fr) 2fr auto; gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.librow .nm { font-weight: 600; }
+.librow .dm { color: var(--muted); font-size: 12px; }
+.librow .ct { font: 12px var(--mono); color: var(--text); }
+.librow .st { font: 11px var(--mono); color: var(--warn); margin-top: 3px; }
+.librow .st.ok { color: var(--ok); } .librow .st.bad { color: var(--bad); }
+.librow .acts { display: flex; gap: 6px; }
+.librow button { height: 26px; font-size: 11.5px; padding: 0 9px; }
+.engine.warn { color: var(--warn); border-color: var(--warn); }

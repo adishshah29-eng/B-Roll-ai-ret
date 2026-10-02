@@ -15,8 +15,9 @@
 <header class="top">
   <div class="brand"><span class="logo"></span>Epoch <small>true · cuts · yours</small></div>
   <nav class="tabs" id="tabs">
-    <button data-tab="editor">Editor</button>
-    <button data-tab="search" class="active">Search</button>
+    <button data-tab="editor" class="active">Editor</button>
+    <button data-tab="libraries">Libraries</button>
+    <button data-tab="search">Search</button>
     <button data-tab="script">Script</button>
     <button data-tab="memory">Memory</button>
   </nav>
@@ -24,7 +25,7 @@
 </header>
 
 <main>
-  <section id="tab-search" class="tab active">
+  <section id="tab-search" class="tab">
     <form id="searchForm" class="searchbar" autocomplete="off">
       <input id="q" type="search" placeholder="Search your footage, e.g. rain on the road / बारिश में सड़क पर ट्रैफिक" autofocus>
       <button type="submit" class="primary">Search</button>
@@ -34,6 +35,7 @@
       <label class="slider" title="0 = pure relevance, 1 = maximum variety">
         Variety <input id="div" type="range" min="0" max="1" step="0.05" value="0.3"><output id="divOut">0.30</output>
       </label>
+      <label class="slider">Library <select id="libFilter"></select></label>
       <div class="chips" id="chips">
         <span class="chip-group">Size
           <button class="chip" data-f="size" data-v="wide">wide</button>
@@ -69,6 +71,7 @@
     <div class="script-actions">
       <button id="planBtn" class="primary">Plan B-roll</button>
       <button id="sampleBtn" class="ghost">Load sample script</button>
+      <label class="toggle" title="Only use clips from one domain library">Library <select id="planLib"></select></label>
       <label class="toggle" title="How the sequence is chosen"><select id="cutMode">
         <option value="balanced" selected>Cut-aware: balanced</option>
         <option value="smooth">Cut-aware: smoothest</option>
@@ -86,7 +89,7 @@
     <div id="seqSummary"></div>
     <div id="plan"></div>
   </section>
-  <section id="tab-editor" class="tab">
+  <section id="tab-editor" class="tab active">
     <div id="edStart">
       <h3 class="memh">Add B-roll to your video</h3>
       <p class="meta">Upload a talking-head or A-roll video. It transcribes the speech, picks where B-roll should cut in, fills each spot
@@ -95,6 +98,8 @@
       <div class="memform">
         <input id="edFile" type="file" accept="video/*">
         <input id="edName" placeholder="Project name (optional)">
+        <div class="libpick"><span class="chip-group">Library</span> <select id="edLib"></select>
+          <label class="toggle"><input type="checkbox" id="edLive" checked> Also fetch fresh clips from Pixabay</label></div>
         <textarea id="edScript" rows="3" placeholder="Optional: paste your script for cleaner wording (timing always comes from the audio)"></textarea>
         <div class="script-actions"><button id="edUpload" class="primary">Upload and analyse</button><span id="edMsg" class="meta"></span></div>
         <div class="seqbar"><div id="edProg"></div></div>
@@ -117,6 +122,28 @@
       <div id="edTranscript" class="edtr"></div>
       <div id="edPanel"></div>
       <div id="edOut"></div>
+    </div>
+  </section>
+  <section id="tab-libraries" class="tab">
+    <h3 class="memh">Your libraries</h3>
+    <p class="meta">A library is a set of clips for one domain (travel, food, fitness...). A project searches only inside the library you pick,
+      so every suggestion is on-topic. Libraries work offline once built.</p>
+    <div id="libList"></div>
+    <h3 class="memh">New library</h3>
+    <div class="memform">
+      <input id="libName" placeholder="Name, e.g. Travel India">
+      <textarea id="libDomain" rows="2" placeholder="The domain in a sentence, e.g. travel in India: trains, beaches, mountains, markets, street food"></textarea>
+      <div class="libmodes">
+        <label><input type="radio" name="libKind" value="upload" checked> Upload my own clips</label>
+        <label><input type="radio" name="libKind" value="auto"> Build from Pixabay</label>
+        <label><input type="radio" name="libKind" value="folder"> Use a folder on this computer</label>
+      </div>
+      <div id="libUploadBox"><input id="libFiles" type="file" accept="video/*" multiple></div>
+      <div id="libAutoBox" hidden>Clips <input id="libN" type="number" min="8" max="150" value="60" style="width:80px">
+        <span class="meta">downloaded and fully analysed (about 4 MB each). Needs internet once.</span></div>
+      <div id="libFolderBox" hidden><input id="libFolder" placeholder="C:\Footage\Travel"></div>
+      <div class="script-actions"><button id="libCreate" class="primary">Create library</button><span id="libMsg" class="meta"></span></div>
+      <div class="seqbar"><div id="libProg"></div></div>
     </div>
   </section>
   <section id="tab-memory" class="tab">
@@ -154,6 +181,7 @@
 </div>
 
 <script src="/static/app.js"></script>
+<script src="/static/libraries.js"></script>
 <script src="/static/editor.js"></script>
 </body>
 </html>

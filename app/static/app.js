@@ -161,7 +161,7 @@ $("#planBtn").addEventListener("click", async () => {
   $("#planBtn").disabled = true;
   try {
     const mode = $("#cutMode").value;
-    PLAN = await api("/api/plan", { script, use_truth: $("#truthOn").checked, use_memory: $("#memOn").checked, use_cuts: mode !== "greedy", cut_weight: mode === "smooth" ? 0.8 : null });
+    PLAN = await api("/api/plan", { script, library: +$("#planLib").value || null, use_truth: $("#truthOn").checked, use_memory: $("#memOn").checked, use_cuts: mode !== "greedy", cut_weight: mode === "smooth" ? 0.8 : null });
     renderPlan();
     renderSeqSummary();
     $("#playSeqBtn").disabled = !PLAN.beats.some((x) => x.chosen.length);

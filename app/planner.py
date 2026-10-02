@@ -116,7 +116,8 @@ def _why(c: dict) -> list:
 def plan(searcher, script: str, wpm: int = 150, use_truth: bool = True, today: str | None = None,
          use_cuts: bool = True, cut_weight: float | None = None, use_memory: bool = True,
          niche: str | None = None, commercial_only: bool = False, target_s: float | None = None,
-         max_shot_s: float | None = None, vertical: bool = False, beats: list | None = None) -> dict:
+         max_shot_s: float | None = None, vertical: bool = False, beats: list | None = None,
+         library: int | None = None, also_lib: int | None = None, style_prior: bool = True) -> dict:
     from .search import shot_cards
     snap = searcher.holder.get()
     beats = beats if beats is not None else split_beats(script, wpm)   # editor mode passes timed slots
@@ -125,9 +126,11 @@ def plan(searcher, script: str, wpm: int = 150, use_truth: bool = True, today: s
     beats = fit_to_target(beats, target_s)
     w = cuts.CUT_WEIGHT if cut_weight is None else cut_weight
     max_shot = max_shot_s or LONG_BEAT_S
-    cand_filters = {"licence": "commercial"} if commercial_only else None
+    cand_filters = {**({"licence": "commercial"} if commercial_only else {}), **({"library": library} if library else {}),
+                    **({"also_lib": also_lib} if also_lib else {})} or None
     searcher.encode_many([b.query or b.text for b in beats])             # one batch for the whole script
-    raw = [searcher.candidates(b.query or b.text, k=CAND_K_TRUTH, filters=cand_filters, niche=niche) for b in beats]
+    raw = [searcher.candidates(b.query or b.text, k=CAND_K_TRUTH, filters=cand_filters, niche=niche,
+                            terms=b.query or b.text) for b in beats]
     rel_of = {}                                               # displayed score = pure relevance
     for cl in raw:
         for r, rel in cl:
@@ -162,7 +165,8 @@ def plan(searcher, script: str, wpm: int = 150, use_truth: bool = True, today: s
             new = []
             for r, rel in cl:
                 bonus, hits = bmap.get(r, (0.0, 0))
-                bonus += memory.style_bonus(str(snap.size[r]), st)
+                if style_prior:                               # the editor turns this off: a size habit must not outrank relevance
+                    bonus += memory.style_bonus(str(snap.size[r]), st)
                 mem_info[(bi, r)] = (bonus, hits)
                 new.append((r, rel + bonus))
             adj.append(new)

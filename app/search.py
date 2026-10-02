@@ -9,7 +9,7 @@ from collections import OrderedDict
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 
-from . import db, licence, models, niches
+from . import db, licence, models, niches, textutil
 from .config import (CANDIDATES_TOP, CLUSTER_DIST, DEDUPE_SIM, DEDUPE_WINDOW_S, DEFAULT_DIVERSITY,
                      DEFAULT_K, GATE_DELTA, MIN_SCORE)
 from .indexer import tags
@@ -20,6 +20,8 @@ MMR_POOL = 100
 SIMILAR_PER_SOURCE = 2
 SEARCH_PER_SOURCE = 4         # one long film must not fill the whole results page
 PLAN_PER_SOURCE = 3
+TAG_WEIGHT = 0.07             # relevance bonus when ALL query words appear in the clip's title/tags (CLIP alone can't tell 'about right' from 'vaguely similar')
+TAG_POOL = 300
 
 
 class LRU:
@@ -166,6 +168,15 @@ class Searcher:
             m &= np.isin(snap.source, f["source"])
         if f.get("licence") == "commercial":              # ads / commercial videos: own, free-to-use, credit-only
             m &= np.isin(snap.lic, licence.COMMERCIAL)
+        if f.get("library"):                               # one domain library only
+            m &= snap.lib == int(f["library"])
+        else:                                              # "all footage" leaves out clips fetched live for a single edit
+            live_ids = [r[0] for r in db.conn().execute("SELECT id FROM libraries WHERE kind='live'")]
+            if live_ids:
+                keep = ~np.isin(snap.lib, live_ids)
+                if f.get("also_lib"):                      # ...except this edit's own fetched clips
+                    keep |= snap.lib == int(f["also_lib"])
+                m &= keep
         if f.get("min_len"):
             m &= (snap.t1 - snap.t0) >= float(f["min_len"])
         return m
@@ -181,7 +192,23 @@ class Searcher:
                 out.append(r)
         return out
 
-    def _relevant(self, snap: Snapshot, q: np.ndarray, mask: np.ndarray, cap: int | None = None):
+    @staticmethod
+    def _tag_scores(snap: Snapshot, rows, terms: str) -> dict:
+        """row -> share of the query's content words found in the clip's human-written title/tags (stock clips only)."""
+        want = textutil.tokens(terms)
+        if not want or len(rows) == 0:
+            return {}
+        ids = [int(snap.ids[r]) for r in rows]
+        q = ",".join("?" * len(ids))
+        by_id = {r: i for r, i in zip(ids, rows)}
+        out = {}
+        for rec in db.conn().execute(
+                f"""SELECT s.id, si.title, si.tags FROM shots s JOIN stock_items si ON si.id=s.stock_id WHERE s.id IN ({q})""", ids):
+            hay = set(textutil.tokens(f"{rec['title'] or ''} {rec['tags'] or ''}"))
+            out[by_id[rec["id"]]] = sum(1 for t in want if t in hay) / len(want)
+        return out
+
+    def _relevant(self, snap: Snapshot, q: np.ndarray, mask: np.ndarray, cap: int | None = None, terms: str | None = None):
         """Return (rows sorted by relevance desc, scores array for all rows). Gate + dedupe applied."""
         if len(snap) == 0:
             return [], np.zeros(0)
@@ -192,17 +219,24 @@ class Searcher:
         top = top[s[top] > -1.0]
         if len(top) == 0:
             return [], scores
+        if terms:                                         # hybrid: CLIP similarity + title/tag word overlap
+            tag = self._tag_scores(snap, top[:TAG_POOL], terms)
+            if tag:
+                scores = scores.copy()
+                for r, v in tag.items():
+                    scores[r] += TAG_WEIGHT * v
+                top = top[np.argsort(-scores[top])]
         keep = gate(scores[top])
         top = top[keep]
         key = np.where(snap.file_id >= 0, snap.file_id, 1_000_000 + snap.stock_id)
         rows = dedupe(top, snap.E, key, snap.t0)
         return (self._cap_per_source(snap, rows, cap) if cap else rows), scores
 
-    def candidates(self, text: str, k: int = 8, filters=None, niche=None) -> list:
+    def candidates(self, text: str, k: int = 8, filters=None, niche=None, terms: str | None = None) -> list:
         """Planner input: relevance-gated, deduped, NOT clustered. Returns [(row, score)]."""
         snap = self.holder.get()
         q = niches.blend(self.encode(text), niche)
-        rows, scores = self._relevant(snap, q, self._mask(snap, filters), cap=PLAN_PER_SOURCE)
+        rows, scores = self._relevant(snap, q, self._mask(snap, filters), cap=PLAN_PER_SOURCE, terms=terms)
         return [(r, float(scores[r])) for r in rows[:k]]
 
     def search(self, query: str, k=DEFAULT_K, diversity=DEFAULT_DIVERSITY, filters=None, niche=None) -> dict:

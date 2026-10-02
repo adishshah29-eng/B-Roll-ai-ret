@@ -1,0 +1,69 @@
+# Travel domain: curated Pixabay search terms (short, concrete, tag-friendly). Used by the library builder
+# (Libraries tab > Build from Pixabay) whenever the domain contains the word "travel".
+pixabay:
+  # getting there
+  - train journey
+  - railway station
+  - airport terminal
+  - airplane window
+  - road trip
+  - highway driving
+  - bus window
+  - boat ride
+  - motorbike mountains
+  - backpacker
+  - tourist walking
+  - suitcase luggage
+  # destinations
+  - goa beach
+  - kerala backwaters
+  - rajasthan fort
+  - jaipur palace
+  - varanasi ghats
+  - taj mahal
+  - himalaya mountains
+  - rishikesh river
+  - mumbai street
+  - delhi street
+  - udaipur lake
+  - india temple
+  - india market
+  - darjeeling tea
+  # landscapes
+  - sunrise mountains
+  - sunset beach
+  - waterfall forest
+  - desert dunes
+  - lake reflection
+  - snow mountains
+  - tropical island
+  - rice fields
+  - valley fog
+  - coastline aerial
+  - drone landscape
+  - night sky stars
+  # culture and food
+  - street food market
+  - local market
+  - spice market
+  - temple ceremony
+  - festival crowd
+  - traditional dance
+  - cafe coffee
+  - street cooking
+  # cities
+  - city skyline
+  - old town street
+  - night city lights
+  - auto rickshaw
+  - metro train
+  - crowded street
+  # stays and activities
+  - hotel room
+  - resort pool
+  - hiking trail
+  - camping tent
+  - campfire
+  - kayaking
+  - surfing
+  - cycling road

@@ -81,9 +81,10 @@ def ensure_file(stock_id: int):
     if info is None:
         dest.unlink(missing_ok=True)
         raise NotHydratable("downloaded file is not readable by OpenCV")
-    c.execute("""INSERT OR IGNORE INTO files(path,status,tier,stock_id,duration,fps,width,height)
-                 VALUES(?,'hydrated','L',?,?,?,?,?)""",
-              (str(dest.resolve()), stock_id, info["duration"], info["fps"], info["width"], info["height"]))
+    c.execute("""INSERT OR IGNORE INTO files(path,status,tier,stock_id,duration,fps,width,height,library_id)
+                 VALUES(?,'hydrated','L',?,?,?,?,?,?)""",
+              (str(dest.resolve()), stock_id, info["duration"], info["fps"], info["width"], info["height"],
+               item["library_id"]))
     c.commit()
     f = c.execute("SELECT * FROM files WHERE path=?", (str(dest.resolve()),)).fetchone()
     jobs.enqueue("file", f["id"], jobs.STAGE_INDEX, priority=7)   # full shot analysis in the background

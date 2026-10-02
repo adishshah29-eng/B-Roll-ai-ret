@@ -26,3 +26,5 @@ Long-form docs: [problem statement](../FINAL_PROBLEM_STATEMENT.md) · [full syst
 2. **The API contract in `02-architecture.md` is frozen** once the UI starts. Change it only together.
 3. **Hit a cut line? Cut, don't extend.** Cut lines are listed in the plan.
 4. Log decisions in one line each. Future-you will forget why.
+
+| [15-libraries.md](15-libraries.md) | Domain libraries | Library logic changes |

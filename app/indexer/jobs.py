@@ -18,7 +18,7 @@ def enqueue(kind: str, target_id: int, stage: str, priority: int = 5) -> bool:
     return cur.rowcount > 0
 
 
-def enqueue_folder(folder: str) -> dict:
+def enqueue_folder(folder: str, library_id: int | None = None) -> dict:
     """Register every video under folder (idempotent) and enqueue an index job per new file."""
     c = db.conn()
     root = Path(folder)
@@ -29,6 +29,8 @@ def enqueue_folder(folder: str) -> dict:
         found += 1
         path = str(p.resolve())
         c.execute("INSERT OR IGNORE INTO files(path,status) VALUES(?, 'pending')", (path,))
+        if library_id:
+            c.execute("UPDATE files SET library_id=? WHERE path=?", (library_id, path))
         fid = c.execute("SELECT id FROM files WHERE path=?", (path,)).fetchone()["id"]
         if enqueue("file", fid, STAGE_INDEX, priority=5):
             new += 1

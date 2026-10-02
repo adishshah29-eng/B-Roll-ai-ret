@@ -16,6 +16,7 @@ from .indexer import jobs, worker
 from .search import Searcher
 from .sources import hydrate, ingest
 from .editor import api as editor_api
+from .libraries import router as libraries_router
 from .store import SnapshotHolder
 
 STATIC = Path(__file__).parent / "static"
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Epoch B-roll", lifespan=lifespan)
 app.include_router(editor_api.router)
+app.include_router(libraries_router)
 
 
 class SearchReq(BaseModel):
@@ -74,6 +76,7 @@ class PlanReq(BaseModel):
     use_truth: bool = True
     use_cuts: bool = True
     use_memory: bool = True
+    library: int | None = None
     cut_weight: float | None = None
     today: str | None = None            # ISO date to evaluate "today/this week" against (demo + tests)
 
@@ -185,7 +188,8 @@ def make_plan(req: PlanReq):
         raise HTTPException(400, "empty script")
     t0 = time.perf_counter()
     out = planner.plan(state["search"], req.script, wpm=req.wpm, use_truth=req.use_truth, today=req.today,
-                       use_cuts=req.use_cuts, cut_weight=req.cut_weight, use_memory=req.use_memory)
+                       use_cuts=req.use_cuts, cut_weight=req.cut_weight, use_memory=req.use_memory,
+                       library=req.library)
     out["took_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     return out
 

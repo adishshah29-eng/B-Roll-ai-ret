@@ -23,7 +23,8 @@ def _project(pid):
 
 
 @router.post("/projects")
-async def create(file: UploadFile = File(...), script: str = Form(""), name: str = Form("")):
+async def create(file: UploadFile = File(...), script: str = Form(""), name: str = Form(""),
+                 library: int = Form(0), live: str = Form("")):
     ext = Path(file.filename or "").suffix.lower()
     if ext not in OK_EXT:
         raise HTTPException(400, f"unsupported file type {ext or '?'}; use mp4, mov, webm, mkv or avi")
@@ -41,16 +42,19 @@ async def create(file: UploadFile = File(...), script: str = Form(""), name: str
                 raise HTTPException(413, "file larger than 1 GB")
             out.write(chunk)
     store.save(pid, {"id": pid, "name": name or Path(file.filename).stem, "source": dst.name, "script": script.strip(),
-                     "stage": "analysing", "slots": []})
+                     "stage": "analysing", "slots": [], "library": library or None,
+                     "live_search": (live == "1") if library else True})
     store.set_status(pid, "uploaded", 0.02)
     pipeline.start_analyse(pid, get_searcher())
     return {"id": pid}
 
 
 @router.get("/config")
-def config():
+def config(check: int = 0):
     import os
-    return {"llm": llm.provider_name(), "pixabay": bool(os.getenv("PIXABAY_API_KEY")), "model": llm.GEMINI_MODEL}
+    from .. import gemini
+    g = gemini.check() if check else {"enabled": gemini.enabled(), "ok": None, "model": None, "error": None}
+    return {"llm": "gemini" if g["enabled"] else "offline", "gemini": g, "pixabay": bool(os.getenv("PIXABAY_API_KEY"))}
 
 
 @router.get("/projects/{pid}/frames/{name}")
@@ -97,11 +101,16 @@ def put_slots(pid: str, req: SlotsReq):
         clean.append({**s, "start": round(a, 2), "end": round(b, 2)})
     if req.refill:
         keep = {i: s.get("shot") for i, s in enumerate(clean) if s.get("locked")}
+        also = p.get("live_library") if not p.get("library") else None
         if req.live:
-            live.fetch(pipeline.queries_for([s for s in clean if not s.get("locked")]), get_searcher())
-        clean = pipeline._fill(get_searcher(), clean)
-        for i, sh in keep.items():
+            qs, n_main = pipeline.queries_for([s for s in clean if not s.get("locked")])
+            if not p.get("library"):
+                also = pipeline.live_library(pid, p)
+            live.fetch(qs, get_searcher(), library_id=p.get("library") or also, n_main=n_main)
+        clean = pipeline._fill(get_searcher(), clean, library=p.get("library"), also_lib=also)
+        for i, sh in keep.items():                    # your locked picks are never judged, moved or replaced
             clean[i]["shot"], clean[i]["locked"] = sh, True
+        pipeline.finish(get_searcher(), clean, p.get("library"), also, live_on=req.live)
     p["slots"], p["rendered"] = clean, False
     store.save(pid, p)
     return {"slots": clean}

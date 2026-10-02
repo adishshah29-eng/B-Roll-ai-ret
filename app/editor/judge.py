@@ -1,0 +1,127 @@
+"""Second opinion on the picks: Gemini LOOKS at the candidate thumbnails for each spot and says which ones really show what the
+narration is about.
+
+CLIP scores of a text against one thumbnail are too flat to separate "code on a screen" from "something techy" (every candidate sat
+between 0.29 and 0.32), so relevance alone let a Matrix rain clip through for "AI and web dev". A vision model that sees the
+picture and the sentence together does not have that problem. One request covers the whole project (all spots, a few thumbnails
+each), so it costs one call. Without a key, or if the call fails, the picks are left exactly as the retrieval chose them.
+"""
+import base64
+
+from .. import gemini
+from ..config import THUMBS
+
+PER_SLOT = 8            # candidates shown per spot on the first pass
+PER_SLOT_RETRY = 12     # ...and after a rewritten search
+MAX_IMAGES = 60
+
+
+def _thumb(shot_id: int) -> bytes | None:
+    p = THUMBS / f"{shot_id}.jpg"
+    return p.read_bytes() if p.exists() else None
+
+
+def _candidates(slot: dict, n: int = PER_SLOT) -> list:
+    seen, out = set(), []
+    for sh in [slot.get("shot"), slot.get("suggested"), *(slot.get("alts") or [])]:
+        if sh and sh.get("id") not in seen:
+            seen.add(sh["id"])
+            out.append(sh)
+    return out[:n]
+
+
+PROMPT = """You are checking B-roll for a video editor. For each SPOT you get the narration (what the speaker says) and the search
+that was used, then numbered candidate pictures. Say which candidates would genuinely be good B-roll for that narration:
+the picture must show what is being talked about (the real subject, not just something with the same mood or a similar word).
+Reject: sci-fi/neon/CGI imagery when the topic is real-world, green-screen or animated intro/subscribe templates, pictures of a
+different subject that merely shares a keyword, and anything unrelated.
+
+Return JSON only: {"spots": [{"spot": int, "good": [candidate numbers, best first, [] if none is good], "reason": "one short sentence"}]}
+"""
+
+
+def check(slots: list, per_slot: int = PER_SLOT) -> dict | None:
+    """Annotate `slots` in place with `judge` and re-order/replace picks. Returns a small status dict, or None if skipped."""
+    if not gemini.enabled():
+        return None
+    parts, index, n_img = [{"text": PROMPT}], {}, 0
+    for i, s in enumerate(slots):
+        if s.get("locked"):
+            continue
+        cands = [c for c in _candidates(s, per_slot) if n_img + 1 <= MAX_IMAGES]
+        imgs = [(c, _thumb(c["id"])) for c in cands]
+        imgs = [(c, b) for c, b in imgs if b]
+        if not imgs:
+            continue
+        index[i] = [c for c, _ in imgs]
+        parts.append({"text": f"\nSPOT {i}: narration: \"{(s.get('text') or '')[:200]}\" | search: \"{s.get('query', '')}\""})
+        for k, (c, b) in enumerate(imgs, 1):
+            parts += [{"text": f"candidate {k}:"}, {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(b).decode()}}]
+            n_img += 1
+    if not index:
+        return None
+    try:
+        data = gemini.generate_json("", temperature=0.1, timeout=90, parts=parts)
+    except Exception as e:                      # never block the edit
+        return {"ok": False, "error": gemini.redact(e)}
+    changed = 0
+    for r in data.get("spots", []):
+        try:
+            i = int(r["spot"])
+            good = [int(g) for g in r.get("good", [])]
+        except (KeyError, TypeError, ValueError):
+            continue
+        if i not in index:
+            continue
+        cands, s = index[i], slots[i]
+        ok = [cands[g - 1] for g in good if 1 <= g <= len(cands)]
+        rest = [c for c in cands if c not in ok]
+        s["judge"] = {"by": "gemini", "good": len(ok), "of": len(cands), "reason": str(r.get("reason", ""))[:160]}
+        s["alts"] = ok[1:] + rest + [a for a in (s.get("alts") or []) if a.get("id") not in {c["id"] for c in cands}]
+        s["alts"] = s["alts"][:12]
+        cur = s.get("shot") or s.get("suggested")
+        if ok:
+            if not cur or cur["id"] != ok[0]["id"]:
+                changed += 1
+            s["shot"] = ok[0]
+            s.pop("suggested", None)
+        elif s.get("shot"):                     # nothing shown is on topic: leave the spot empty rather than show the wrong thing
+            s["suggested"], s["shot"] = s["shot"], None
+            changed += 1
+    return {"ok": True, "changed": changed, "spots": len(index), "images": n_img}
+
+
+REWRITE = """A video editor searched a stock-footage site for B-roll and a reviewer rejected every picture that came back.
+For each SPOT you get the narration, the searches already tried, and the reviewer's reason. Write 3 NEW searches per spot, each
+different from those tried: 2-4 plain English words about ONE concrete, filmable subject, the way you would type them on a stock
+site. Use what the reviewer said was missing. Prefer real footage (people, hands, objects, places, actions) over abstract or CGI
+imagery. Never use these words: {banned}.
+Return JSON only: {{"spots": [{{"spot": int, "queries": [str, str, str]}}]}}
+"""
+
+
+def rewrite_queries(slots: dict) -> dict:
+    """slots: {index: slot} of spots the reviewer rejected. Returns {index: [new queries]} from ONE Gemini call."""
+    from . import llm
+    if not slots or not gemini.enabled():
+        return {}
+    lines = [REWRITE.format(banned=", ".join(llm.BANNED))]
+    for i, s in slots.items():
+        tried = [s.get("query"), *(s.get("alt_queries") or [])]
+        lines.append(f'SPOT {i}: narration: "{(s.get("text") or "")[:200]}" | tried: {[t for t in tried if t]} | '
+                     f'reviewer: "{(s.get("judge") or {}).get("reason", "")}"')
+    try:
+        data = gemini.generate_json(chr(10).join(lines), temperature=0.6, timeout=60)
+    except Exception:
+        return {}
+    out = {}
+    for r in data.get("spots", []):
+        try:
+            i = int(r["spot"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        qs = [llm.clean_query(q) for q in (r.get("queries") or [])]
+        qs = [q for q in dict.fromkeys(qs) if q and q.lower() not in {t.lower() for t in [slots[i].get("query") or "", *(slots[i].get("alt_queries") or [])]}] if i in slots else []
+        if qs:
+            out[i] = qs[:3]
+    return out
