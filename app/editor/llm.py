@@ -1,8 +1,10 @@
 """The LLM step: read the whole script (units with timings + scene cuts) and decide
    (1) WHERE B-roll should cover the speaker and (2) WHAT each spot should show, as stock-site search queries.
 
-Providers (same output either way, validated and clamped here):
+Providers (same output either way, validated and clamped here), tried in this order:
   gemini     GEMINI_API_KEY in .env  → Gemini reads the timestamped transcript (text only, never video)
+  jev        OPENROUTER_API_KEY      → Jev (TypeSafe decision model) scores every line with calibrated probabilities
+                                       (filmable? how important? which role?); the searches are written offline
   offline    no key / any failure    → rules pick the spots; each line becomes queries via keyword extraction + the
                                        CLIP concept vocabulary (works for Hindi too)
 Output: {"provider", "slots":[{start,end,text,query,alt_queries,reason}], "summary", "ms", "error"}
@@ -14,7 +16,7 @@ import time
 
 import requests
 
-from .. import gemini
+from .. import gemini, jev
 from ..textutil import STOP as _STOP
 from . import slots as rules
 
@@ -27,8 +29,19 @@ more most some any each other such only own same both few all let lets lot lots 
 say said tell told hi hello everyone welcome back channel today comments comment subscribe video guys thing things stuff one two""".split())
 
 
+def _order() -> list:
+    """Line scorers to try, best first. EPOCH_SCORER=gemini|jev|offline puts that one first (e.g. jev to save Gemini quota)."""
+    have = [p for p, on in (("gemini", gemini.enabled()), ("jev", jev.enabled())) if on]
+    want = (os.getenv("EPOCH_SCORER") or "").strip().lower()
+    if want == "offline":
+        return []
+    return ([want] if want in have else []) + [p for p in have if p != want]
+
+
 def provider_name() -> str:
-    return "gemini" if gemini.enabled() else "offline"
+    """The engine that scores lines. The picture check and in-points need Gemini whichever engine this is."""
+    o = _order()
+    return o[0] if o else "offline"
 
 
 # ───────────────────────── offline "understanding" ─────────────────────────
@@ -85,11 +98,12 @@ def visual_prob(text: str) -> float:
     return float(_probe["clf"].predict_proba(models.embed_texts([text]))[0, 1])
 
 
-def offline_queries(text: str) -> tuple:
+def offline_queries(text: str, vis: float | None = None) -> tuple:
     """Clean stock-site phrases without an LLM. Returns (None, []) when the line is not something you can film: a spot is
-    then left alone instead of being filled with a guess ("people celebrating" for a line of pure talk)."""
+    then left alone instead of being filled with a guess ("people celebrating" for a line of pure talk). `vis` is a
+    filmable-line probability from elsewhere (Jev); without it the local probe decides."""
     from .. import truth
-    if visual_prob(text) < VISUAL_MIN:
+    if (visual_prob(text) if vis is None else vis) < VISUAL_MIN:
         return None, []
     (c1, _), (c2, _) = concepts(text, 2)
     kw = keywords(text)
@@ -142,6 +156,98 @@ def offline_plan(units: list, duration: float, fmap: list, segments: list | None
     note = f" {skipped} line(s) had nothing filmable and keep the speaker on screen." if skipped else ""
     return {"provider": "offline", "slots": spots, "lines": lines,
             "summary": "Offline engine: lines scored by simple signals (places, numbers, filmable words), no LLM." + note}
+
+
+# ───────────────────────── Jev ─────────────────────────
+JEV_WORKERS = 8               # lines are scored in parallel, one decision request each
+JEV_CONTEXT_CHARS = 6000      # whole-transcript context sent with every line (Jev's window is 32k tokens)
+IMPORTANCE_LEVELS = [
+    "Filler: a greeting, sign-off, call to action, meta talk about the video, or repetition",
+    "Minor: an aside or transition that the message does not depend on",
+    "Supporting: useful detail that backs up a point",
+    "Key: a main point, a named place / product / person, a number or result, or a vivid example",
+    "Essential: the central claim, promise or emotional peak the viewer must remember",
+]
+ROLE_CRITERIA = {
+    "hook": "Opens the video or grabs attention (greeting, teaser, question to the viewer).",
+    "key point": "States one of the video's main ideas or claims.",
+    "example": "Gives a concrete example or illustration of a point.",
+    "place": "Names or describes a specific place (city, region, landmark, venue).",
+    "data": "Gives a number, statistic, price, date or measured result.",
+    "story": "Tells a moment of a personal story or anecdote.",
+    "transition": "Links two parts of the video (\"next\", \"now let's talk about\").",
+    "aside": "A side remark, joke or digression that is not part of the message.",
+    "cta": "Asks the viewer to like, subscribe, comment, buy or follow.",
+}
+JEV_QUESTIONS = {
+    "visual": {"type": "noul",
+               "instructions": "Could real stock footage (filmed people, objects, places or actions) show what state.line talks about?",
+               "criteria": {"true": "The line names concrete things, places, people or actions a camera can film.",
+                            "false": "The line is opinion, abstract talk, meta talk about the video, or the speaker addressing the viewer."}},
+    "importance": {"type": "score",
+                   "instructions": "How much does state.line carry the message of the whole video (state.transcript, state.script)? "
+                                   "Most videos have only a few essential lines.",
+                   "criteria": IMPORTANCE_LEVELS},
+    "role": {"type": "choice", "instructions": "What job does state.line do in the video?", "criteria": ROLE_CRITERIA},
+}
+ROLE_REASON = {"hook": "opens the video", "key point": "main point", "example": "concrete example", "place": "names a place",
+               "data": "has a number", "story": "story beat", "transition": "just a transition", "aside": "aside",
+               "cta": "call to action"}
+
+
+def _jev_line(session, u: dict, prev: str, nxt: str, transcript: str, script: str) -> dict:
+    state = {"line": u["text"], "previous_line": prev, "next_line": nxt, "transcript": transcript}
+    if script:
+        state["script"] = script
+    a = jev.decide(state, JEV_QUESTIONS, session)
+    if not {"visual", "importance", "role"} <= a.keys():
+        raise ValueError("Jev skipped a question")
+    return a
+
+
+def _jev(units: list, duration: float, script: str | None, segments: list | None = None, density: str = "balanced") -> dict | None:
+    from concurrent.futures import ThreadPoolExecutor
+    from .. import truth
+    if not jev.enabled():
+        return None
+    speech = [u for u in units if u.get("kind") == "speech" and (u.get("text") or "").strip()]
+    if not speech:
+        return None
+    transcript = " ".join(u["text"] for u in speech)[:JEV_CONTEXT_CHARS]
+    script = (script or "").strip()[:JEV_CONTEXT_CHARS]
+    texts = [u["text"] for u in speech]
+    with requests.Session() as session, ThreadPoolExecutor(JEV_WORKERS) as pool:
+        futs = [pool.submit(_jev_line, session, u, texts[k - 1] if k else "", texts[k + 1] if k + 1 < len(texts) else "",
+                            transcript, script) for k, u in enumerate(speech)]
+        answers, errors = [], []
+        for f in futs:
+            try:
+                answers.append(f.result())
+            except Exception as e:                  # one bad line falls back to the offline scorer, below
+                answers.append(None)
+                errors.append(e)
+    if sum(a is not None for a in answers) < max(1, int(0.8 * len(speech))):
+        raise RuntimeError(f"Jev answered {len(speech) - len(errors)}/{len(speech)} lines; last error: "
+                           f"{jev.redact(f'{type(errors[-1]).__name__}: {errors[-1]}') if errors else 'none'}")
+    offline = {l["id"]: l for l in offline_lines([u for u, a in zip(speech, answers) if a is None])}
+    lines = []
+    for u, a in zip(speech, answers):
+        if a is None:
+            lines.append(offline[u["id"]])
+            continue
+        vis = jev.noul(a["visual"])
+        role = jev.choice(a["role"], "key point")
+        role = role if role in ROLES else "key point"
+        places = [n for n, _ in truth.match_places(u["text"])]
+        q, alts = offline_queries(u["text"], vis) if vis >= rules.VISUAL_MIN else (None, [])
+        lines.append({"id": u["id"], "importance": round(jev.score01(a["importance"], len(IMPORTANCE_LEVELS)), 2),
+                      "visual": round(vis, 2), "role": role, "reason": ROLE_REASON[role],
+                      "query": q or "", "alt_queries": alts, "anchor": places[0] if places else ""})
+    topic = keywords(transcript, n=6)
+    spots = rules.select_spots(lines, units, duration, density, segments) or topic_spot(units, duration, topic, segments)
+    note = f" ({len(offline)} fell back to the offline scorer)" if offline else ""
+    return {"provider": "jev", "slots": spots, "lines": lines,
+            "summary": f"Jev scored {len(lines)} lines{note}; searches written offline. Topic: {topic}."}
 
 
 # ───────────────────────── Gemini ─────────────────────────
@@ -269,14 +375,17 @@ def plan(units: list, cuts: list, duration: float, fmap, script: str | None = No
          density: str = "balanced") -> dict:
     """Score every line (importance, visual, role, query) and place B-roll on the strongest ones for the chosen amount."""
     t0 = time.time()
-    err = None
-    try:
-        g = _gemini(units, cuts, duration, script, segments, density)
-        if g:
-            g["ms"], g["error"] = int((time.time() - t0) * 1000), None
-            return g
-    except Exception as e:                      # network, quota, bad JSON: never block the edit
-        err = gemini.redact(f"{type(e).__name__}: {e}")
+    errs = []
+    for name in _order():
+        try:
+            g = (_gemini(units, cuts, duration, script, segments, density) if name == "gemini"
+                 else _jev(units, duration, script, segments, density))
+            if g:
+                g["ms"], g["error"] = int((time.time() - t0) * 1000), "; ".join(errs) or None
+                return g
+        except Exception as e:                  # network, quota, bad JSON: never block the edit, try the next engine
+            errs.append(f"{name}: " + jev.redact(gemini.redact(f"{type(e).__name__}: {e}")))
+    err = "; ".join(errs) or None
     o = offline_plan(units, duration, fmap() if callable(fmap) else fmap, segments, density)
     o["ms"], o["error"] = int((time.time() - t0) * 1000), err
     return o

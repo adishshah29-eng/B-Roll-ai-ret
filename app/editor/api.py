@@ -56,9 +56,10 @@ async def create(file: UploadFile = File(...), script: str = Form(""), name: str
 @router.get("/config")
 def config(check: int = 0):
     import os
-    from .. import gemini
+    from .. import gemini, jev
     g = gemini.check() if check else {"enabled": gemini.enabled(), "ok": None, "model": None, "error": None}
-    return {"llm": "gemini" if g["enabled"] else "offline", "gemini": g, "pixabay": bool(os.getenv("PIXABAY_API_KEY"))}
+    return {"llm": llm.provider_name(), "gemini": g, "jev": {"enabled": jev.enabled(), "model": jev.model()},
+            "pixabay": bool(os.getenv("PIXABAY_API_KEY"))}
 
 
 @router.get("/projects/{pid}/frames/{name}")

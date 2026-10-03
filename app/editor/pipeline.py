@@ -11,7 +11,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
-from .. import db, planner
+from .. import db, gemini, planner
 from ..sources import hydrate
 from . import analyse, ffmpeg, inpoint, judge, live, llm, slots as rules, split, store, suggest
 
@@ -91,7 +91,7 @@ def finish(searcher, placed: list, lib, also, live_on: bool) -> dict:
     (2) search again for those spots, (3) choose where in each clip the cutaway starts. Step 3 runs for the spots that are already
     fine WHILE step 2 searches and downloads, so the two overlap. Each step is skipped, never fatal, without Gemini."""
     out = {"judge": None, "repair": None, "inpoint": None, "timings": {}}
-    if llm.provider_name() != "gemini":
+    if not gemini.enabled():
         return out
     t = time.time()
     out["judge"] = _safe(judge.check, placed)
@@ -249,8 +249,8 @@ def analyse_project(pid: str, searcher):
         units = split.build_units(segs, scan["cuts"], scan["strip"], info["duration"])
 
         eng = llm.provider_name()
-        store.set_status(pid, f"reading the script ({'Gemini' if eng == 'gemini' else 'offline engine'})", 0.66)
-        # the face map only helps the offline engine's spot rules, so it is computed only if Gemini fails or is absent
+        store.set_status(pid, f"reading the script ({ {'gemini': 'Gemini', 'jev': 'Jev'}.get(eng, 'offline engine')})", 0.66)
+        # the face map only helps the offline engine's spot rules, so it is computed only if Gemini and Jev fail or are absent
         plan = llm.plan(units, scan["cuts"], info["duration"], lambda: analyse.face_map(work), proj.get("script"), segs,
                         proj.get("density") or "balanced")
         clock.lap("script->queries (LLM)")
@@ -272,7 +272,7 @@ def analyse_project(pid: str, searcher):
         placed = _fill(searcher, plan["slots"], library=lib, also_lib=also)
         clock.lap("place")
         verdict = None
-        if llm.provider_name() == "gemini":
+        if gemini.enabled():
             store.set_status(pid, "Gemini is checking the pictures and choosing where each clip starts", 0.93)
             verdict = finish(searcher, placed, lib, also, live_on=bool(proj.get("live_search", lib is None)))
             clock.lap("Gemini check+repair+in-points")
@@ -323,7 +323,7 @@ def replan_project(pid: str, searcher, density: str):
             live.fetch(qs, searcher, None, library_id=lib or also, n_main=n_main)
         store.set_status(pid, "placing B-roll", 0.6)
         placed = _fill(searcher, fresh, library=lib, also_lib=also) if fresh else []
-        if placed and llm.provider_name() == "gemini":
+        if placed and gemini.enabled():
             store.set_status(pid, "Gemini is checking the pictures", 0.8)
             finish(searcher, placed, lib, also, live_on)
         proj.update(slots=sorted(keep + placed, key=lambda x: x["start"]), density=density, rendered=False)

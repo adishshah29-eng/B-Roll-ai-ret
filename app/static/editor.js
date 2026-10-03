@@ -94,9 +94,9 @@
     q("#edInfo").textContent = ` ${tc(p.duration)} · ${p.language || "?"} · ${(p.units || []).filter((u) => u.kind === "speech").length} clips · ${(p.cuts || []).length} scene cuts · ${p.live ? p.live.added : 0} new Pixabay clips · library: ${((window.LIBS || []).find((l) => l.id === p.library) || {}).name || "all footage"}${p.timings ? ` · analysed in ${Math.round(p.timings.total)} s` : ""}`;
     q("#edInfo").title = p.timings ? Object.entries(p.timings).map(([k, v]) => `${k}: ${v} s`).join("\n") : "";
     q("#edSummary").replaceChildren(
-      mk("span", { class: "engine " + (L.provider === "gemini" ? "on" : "") }, L.provider === "gemini" ? "Gemini" : "Offline engine"),
+      mk("span", { class: "engine " + (L.provider === "offline" ? "" : "on") }, { gemini: "Gemini", jev: "Jev" }[L.provider] || "Offline engine"),
       L.summary ? " " + L.summary : "",
-      L.error ? mk("span", { class: "engine warn", style: "margin-left:8px", title: L.error }, "Gemini failed for this project: used the offline engine") : "");
+      L.error ? mk("span", { class: "engine warn", style: "margin-left:8px", title: L.error }, `${L.error.split(":")[0] === "jev" ? "Jev" : "Gemini"} failed for this project: used ${{ gemini: "Gemini", jev: "Jev" }[L.provider] || "the offline engine"}`) : "");
     main.src = `/api/editor/projects/${id}/video`;
     q("#edOut").replaceChildren();
     q("#edFindRes").replaceChildren(); q("#edFindMeta").textContent = "";
