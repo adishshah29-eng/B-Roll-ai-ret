@@ -45,6 +45,18 @@
     } catch { /* ignore */ }
   }
 
+  // dropzone: show the chosen file, accept drag and drop
+  const showPicked = () => { const f = q("#edFile").files[0]; q("#edFileName").textContent = f ? `${f.name} · ${(f.size / 1048576).toFixed(1)} MB` : ""; };
+  q("#edFile").addEventListener("change", showPicked);
+  const drop = q("#edDrop");
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => {
+    const f = [...(e.dataTransfer?.files || [])].find((x) => x.type.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi)$/i.test(x.name));
+    if (!f) { q("#edMsg").textContent = "That file is not a video (use mp4, mov, webm, mkv or avi)."; return; }
+    const dt = new DataTransfer(); dt.items.add(f); q("#edFile").files = dt.files; showPicked();
+  });
+
   q("#edUpload").addEventListener("click", async () => {
     const f = q("#edFile").files[0];
     if (!f) { q("#edMsg").textContent = "Choose a video first."; return; }
@@ -78,7 +90,8 @@
     q("#edStart").hidden = true; q("#edWork").hidden = false;
     q("#edTitle").textContent = p.name;
     const L = p.llm || {};
-    q("#edInfo").textContent = ` ${tc(p.duration)} · ${p.language || "?"} · ${(p.units || []).filter((u) => u.kind === "speech").length} clips · ${(p.cuts || []).length} scene cuts · ${p.live ? p.live.added : 0} new Pixabay clips · library: ${((window.LIBS || []).find((l) => l.id === p.library) || {}).name || "all footage"}`;
+    q("#edInfo").textContent = ` ${tc(p.duration)} · ${p.language || "?"} · ${(p.units || []).filter((u) => u.kind === "speech").length} clips · ${(p.cuts || []).length} scene cuts · ${p.live ? p.live.added : 0} new Pixabay clips · library: ${((window.LIBS || []).find((l) => l.id === p.library) || {}).name || "all footage"}${p.timings ? ` · analysed in ${Math.round(p.timings.total)} s` : ""}`;
+    q("#edInfo").title = p.timings ? Object.entries(p.timings).map(([k, v]) => `${k}: ${v} s`).join("\n") : "";
     q("#edSummary").replaceChildren(
       mk("span", { class: "engine " + (L.provider === "gemini" ? "on" : "") }, L.provider === "gemini" ? "Gemini" : "Offline engine"),
       L.summary ? " " + L.summary : "",

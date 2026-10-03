@@ -3,6 +3,7 @@ land on a title, a fade or the wrong part of the shot. For each chosen clip we s
 frames with the narration to Gemini in ONE call, and start the clip at the window that best shows what is being said.
 Needs a Gemini key; without one, or on any failure, the clips keep their default start."""
 import base64
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
@@ -22,7 +23,7 @@ def _file(sh: dict):
         if r:
             return r
     if sh.get("stock_id"):
-        return hydrate.ensure_file(sh["stock_id"])
+        return hydrate.ensure_file(sh["stock_id"], index=False)
     return None
 
 
@@ -52,33 +53,38 @@ Return JSON only: {"spots": [{"spot": int, "best": "A" | "B" | ... | null}]}
 """
 
 
+def _prepare(item):
+    """(slot index, window start times, frame jpegs) for one slot, or None when there is nothing to choose between."""
+    i, s = item
+    sh = s.get("shot")
+    if not sh or s.get("locked"):
+        return None
+    try:
+        f = _file(sh)
+    except Exception:
+        return None
+    if f is None:
+        return None
+    sd = s["end"] - s["start"]
+    room = (f["duration"] or 0) - sd
+    if room < MIN_STEP_S:                       # clip barely longer than the spot: nothing to choose
+        return None
+    n = max(2, min(MAX_WINDOWS, int(room / MIN_STEP_S) + 1))
+    ins = [float(x) for x in np.linspace(0, room, n)]
+    frames = _frames(f["path"], [t + sd / 2 for t in ins])
+    return (i, ins, frames) if sum(1 for b in frames if b) >= 2 else None
+
+
 def refine(slots: list) -> dict | None:
     """Set shot['trim_in'] on each slot's clip in place. Returns a small status dict, or None if skipped."""
     if not gemini.enabled():
         return None
+    with ThreadPoolExecutor(4) as ex:           # downloads + frame grabs for all spots at once
+        prepared = [r for r in ex.map(_prepare, list(enumerate(slots))) if r]
     parts, index, n_img = [{"text": PROMPT}], {}, 0
-    for i, s in enumerate(slots):
-        sh = s.get("shot")
-        if not sh or s.get("locked"):
-            continue
-        try:
-            f = _file(sh)
-        except Exception:
-            continue
-        if f is None:
-            continue
-        sd = s["end"] - s["start"]
-        D = f["duration"] or 0
-        room = D - sd
-        if room < MIN_STEP_S:                       # clip barely longer than the spot: nothing to choose
-            continue
-        n = max(2, min(MAX_WINDOWS, int(room / MIN_STEP_S) + 1))
-        ins = [float(x) for x in np.linspace(0, room, n)]
-        frames = _frames(f["path"], [t + sd / 2 for t in ins])
-        if sum(1 for b in frames if b) < 2:
-            continue
+    for i, ins, frames in prepared:
         index[i] = ins
-        parts.append({"text": f"\nSPOT {i}: narration: \"{(s.get('text') or '')[:200]}\""})
+        parts.append({"text": f"{chr(10)}SPOT {i}: narration: \"{(slots[i].get('text') or '')[:200]}\""})
         for k, b in enumerate(frames):
             if b:
                 parts += [{"text": f"frame {LETTERS[k]}:"}, {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(b).decode()}}]

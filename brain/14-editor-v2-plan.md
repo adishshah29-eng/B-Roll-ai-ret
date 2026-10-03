@@ -61,3 +61,23 @@ Test video: a man explaining Python (8 s). First run put Matrix rain over "used 
 - Gemini calls rotate round-robin across models with per-model cooldowns (`app/gemini.py`).
 Result: "Python is an incredibly powerful language" gets real programming code (snake clips rejected by the judge), "AI and web dev" gets a developer at a computer. Tests: 79 passed, 1 skipped.
 Still open: coverage is Gemini-dependent (2 spots, 3.1 s of 8 s); CLIP scores stay flat so the judge needs Gemini; the judge sees thumbnails, not motion.
+
+## General improvements after the 32 s travel test (2026-10-03)
+Research: B-Script (115 expert editors): 73 % of cutaways start within 1 s of a transcript keyword; MLLM query paraphrasing; retrieve-then-LLM-rerank (MERLIN, X-CoT); frame-level matching (X-CLIP). None of this is travel-specific.
+1. **Judge loop** (`pipeline.finish`, `judge.rewrite_queries`): spots where the vision judge says nothing fits get 3 new queries written from its reason, fetched, re-searched and re-judged on a wider pool (12). One round.
+2. **Keyword-anchored cuts** (`llm._validate`, `_word`): Gemini returns an `anchor` word per spot; the cut starts on that word's Whisper timestamp (-0.15 s), kept inside its speech clip. UI: "Cut starts on <word>".
+3. **In-point** (`app/editor/inpoint.py`): up to 5 windows per chosen clip, frames + narration to Gemini in one call, `shot.trim_in` set to the best window (preview and render already honour it). "No moment fits" is flagged in the panel.
+4. **Phrasing fusion** (`pipeline._fill`, `_fuse`): main query + both alternatives are always searched; the candidate pool is their reciprocal-rank fusion (one entry per video). The pick still comes from the main query (so CUTS planning applies to it); the judge may override it.
+5. **Coverage**: prompt allows two spots per long clip; planner retries once if it returns too few spots or < 30 % coverage.
+Result on the 32 s travel video: 4/4 spots filled (was 3/4), 30-33 % coverage (was 28 %), 1 spot repaired by the loop, in-points chosen (e.g. train clip starts 28.5 s in). Tests: 79 passed.
+Known: the whole analysis takes 3-4 min on this machine (12 Pixabay queries + embedding + 3 Gemini calls + clip downloads); the Gemini in-point choice may favour the first frame; coverage is still under the 45 % target.
+
+## Speed pass (2026-10-03), not yet measured
+The 32 s travel video took 175-240 s. Changes (from reading the code; no timing run was made, per the user):
+- `live.fetch`: all Pixabay searches in parallel (4 threads); per query only clips whose tags match the query (a few untagged ones only if < 5 match); caps 25/12 -> 18/8; every clip embedded once in ONE batch (was one embedding call per query).
+- `judge.check` also returns 3 new searches for spots where nothing fits (was a separate Gemini call).
+- Gemini repair (search + fill + re-judge) overlaps with in-point selection for the spots that are already fine; in-point downloads and frame grabs run 4 at a time.
+- `hydrate.ensure_file(index=False)` for in-point downloads: no background full-analysis job per clip (it competed for CPU and the database; the `database is locked` seen once was probably this).
+- Audio (Whisper) and picture scan run at the same time; Whisper uses all CPU threads (`WHISPER_MODEL=base` in .env for ~3x faster, slightly less accurate); the face map is only computed if the offline engine is needed.
+- The planner's second Gemini call now happens only when too few spots come back (not for coverage).
+- Each project stores `timings` (seconds per stage); the editor header shows "analysed in N s", hover for the breakdown.

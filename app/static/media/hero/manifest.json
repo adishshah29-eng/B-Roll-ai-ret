@@ -1,0 +1,22 @@
+{
+  "source": "app/static/media/hero.mp4 (audio dropped)",
+  "fps": 15,
+  "pattern": "f%03d.webp",
+  "poster": "poster.jpg",
+  "note": "fixed generator mark removed with ffmpeg delogo; regenerate with python -m eval.make_hero_frames",
+  "sets": {
+    "d": {
+      "width": 1600,
+      "height": 900,
+      "quality": 72,
+      "total_kb": 3643
+    },
+    "m": {
+      "width": 800,
+      "height": 450,
+      "quality": 66,
+      "total_kb": 1558
+    }
+  },
+  "frames": 150
+}

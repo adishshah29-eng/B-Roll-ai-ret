@@ -28,3 +28,5 @@ Long-form docs: [problem statement](../FINAL_PROBLEM_STATEMENT.md) · [full syst
 4. Log decisions in one line each. Future-you will forget why.
 
 | [15-libraries.md](15-libraries.md) | Domain libraries | Library logic changes |
+| [16-architecture-and-flows.md](16-architecture-and-flows.md) | Architecture and full data flow, as built | Onboarding, demos, any structural change |
+| [18-landing-page-plan.md](18-landing-page-plan.md) | Landing page, palette reset, GSAP hero scrub (plan) | Any landing or theme work |

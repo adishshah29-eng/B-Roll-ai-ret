@@ -219,12 +219,12 @@ def _gemini(units: list, cuts: list, duration: float, script: str | None, segmen
     def cover(sl):
         return sum(o["end"] - o["start"] for o in sl)
 
-    for attempt in range(2):                    # too few spots or too little coverage gets one more try; the better answer is kept
+    for attempt in range(2):                    # too few spots gets one more try; the better answer is kept
         d = gemini.generate_json(prompt, temperature=0.3 if attempt == 0 else 0.7)
         got = _validate(d, units, duration, segments)
         if cover(got) > cover(best):
             best, data = got, d
-        if len(best) >= min(nspots, n_speech) and cover(best) >= 0.3 * duration:
+        if len(best) >= min(nspots, n_speech):   # only too FEW spots justifies another ~8 s Gemini call
             break
     if not best:
         return None
@@ -241,6 +241,6 @@ def plan(units: list, cuts: list, duration: float, fmap: list, script: str | Non
             return g
     except Exception as e:                      # network, quota, bad JSON: never block the edit
         err = gemini.redact(f"{type(e).__name__}: {e}")
-    o = offline_plan(units, duration, fmap)
+    o = offline_plan(units, duration, fmap() if callable(fmap) else fmap)
     o["ms"], o["error"] = int((time.time() - t0) * 1000), err
     return o

@@ -142,9 +142,17 @@ pollStatus(); setInterval(pollStatus, 2000);
 // ---------- tabs ----------
 document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => {
   if (b.disabled) return;
-  document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x === b));
+  document.querySelectorAll("#tabs button").forEach((x) => { x.classList.toggle("active", x === b); x.setAttribute("aria-selected", x === b ? "true" : "false"); });
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + b.dataset.tab));
 }));
+
+// "New project" always lands on the upload screen
+document.getElementById("navNew").addEventListener("click", () => {
+  document.querySelector('#tabs [data-tab="editor"]').click();
+  if (!document.getElementById("edWork").hidden) document.getElementById("edBack").click();
+  document.getElementById("edFile").focus();
+  window.scrollTo({ top: 0 });
+});
 
 // ---------- script → plan ----------
 const SAMPLE = `Every morning, the city wakes up in a rush.

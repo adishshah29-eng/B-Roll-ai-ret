@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Epoch — B-roll that fits what you say.</title>
+  <meta name="description" content="Intelligent B-roll editor: search indexed archives, cut to your voice, verify the facts with Gemini, keep CC attribution and commercial rights.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2306111C'/><path d='M12 9.5v13l11-6.5z' fill='%23E6F1F6'/><circle cx='25' cy='7' r='3.5' fill='%23C63A33'/></svg>">
+  <link rel="stylesheet" href="/static/fonts/fonts.css">
+  <link rel="stylesheet" href="/static/landing.css">
+  <script>
+    // Client-side bookmark redirect for editor routes
+    if (location.hash && location.hash.startsWith('#editor')) {
+      location.replace('/app' + location.hash);
+    }
+  </script>
+</head>
+<body>
+
+  <!-- Site Navigation -->
+  <header class="site-header">
+    <div class="nav-container">
+      <a class="brand" href="/" aria-label="Epoch home">
+        <span class="logo-badge" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><path d="M12 9.5v13l11-6.5z"/></svg>
+        </span>
+        <span class="brand-text">Epoch</span>
+      </a>
+      <nav aria-label="Main Navigation">
+        <ul class="nav-links">
+          <li><a href="#why">Why Epoch</a></li>
+          <li><a href="#pipeline">The Pipeline</a></li>
+          <li><a href="#showcase">Showcase</a></li>
+          <li><a href="#pillars">Three Pillars</a></li>
+          <li><a href="#licence">Licence Sheet</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+      <div class="nav-actions">
+        <a href="/app" class="btn btn-primary">Open Epoch</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Pinned Canvas Frame Hero Section (420% scrub distance) -->
+  <div class="hero-scroll-container">
+    <div class="hero-pin-wrapper">
+      <canvas id="hero-canvas" aria-hidden="true"></canvas>
+      <video class="hero-video-fallback" src="/static/media/hero/d/f001.webp" poster="/static/media/hero/poster.jpg" autoplay loop muted playsinline></video>
+      <div class="hero-vignette" aria-hidden="true"></div>
+
+      <!-- Synchronized Copy Beats -->
+      <div class="hero-overlay-beats">
+        
+        <!-- Beat 1: Initial Pitch -->
+        <div class="hero-beat active" id="beat-1">
+          <span class="beat-chip"><span class="dot"></span> Archive Indexer · Speech Cadence · Provenance</span>
+          <h1>B-roll that fits what you say.</h1>
+          <p class="beat-desc">Search indexed archives, cut to your voice, verify the facts, keep your rights.</p>
+          <div class="beat-actions">
+            <a href="/app" class="btn btn-primary btn-lg">Open Epoch</a>
+            <a href="#why" class="btn btn-ghost-dark btn-lg">See how it works</a>
+          </div>
+        </div>
+
+        <!-- Beat 2: True (Gemini Truth Check) -->
+        <div class="hero-beat" id="beat-2">
+          <span class="beat-chip"><span class="dot"></span> Gemini Multimodal Verifier</span>
+          <h2>True.</h2>
+          <p class="beat-desc">Every candidate frame is fact-checked against what you claimed. Place, season, action, context—no visual hallucinations.</p>
+          <div class="beat-actions">
+            <a href="#showcase" class="btn btn-ghost-dark">Inspect a verified cut</a>
+          </div>
+        </div>
+
+        <!-- Beat 3: Cuts (Whisper Cadence) -->
+        <div class="hero-beat" id="beat-3">
+          <span class="beat-chip"><span class="dot"></span> Whisper Phonetic Timings</span>
+          <h2>Cuts.</h2>
+          <p class="beat-desc">Aligned to the spoken keyword on natural pauses and breath beats. Your original voice track stays 100% untouched.</p>
+          <div class="beat-actions">
+            <a href="#pipeline" class="btn btn-ghost-dark">View the cut pipeline</a>
+          </div>
+        </div>
+
+        <!-- Beat 4: Yours (Commercial CC Rights) -->
+        <div class="hero-beat" id="beat-4">
+          <span class="beat-chip"><span class="dot"></span> Full Commercial Clearance</span>
+          <h2>Yours.</h2>
+          <p class="beat-desc">Every clip carries verifiable provenance, Pixabay or Pexels CC licences, and an automatic end-credits sheet.</p>
+          <div class="beat-actions">
+            <a href="/app" class="btn btn-primary btn-lg">Launch Project Studio</a>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Scroll Indicator -->
+      <div class="scroll-indicator" aria-hidden="true">
+        <div class="mouse-icon"></div>
+        <span>Scroll to scrub frames</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section: Why B-roll is Broken -->
+  <section id="why" class="section section-paper">
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-chip">The Problem</span>
+        <h2 class="section-title">Why B-roll is broken today</h2>
+        <p class="section-sub">Creators spend hours wading through stock search bars or dealing with eerie AI video that ruins authority.</p>
+      </div>
+
+      <div class="problem-grid">
+        <div class="problem-card broken">
+          <span class="card-status">Traditional Stock</span>
+          <h3>Manual & Tedious</h3>
+          <p>Creators waste 2 to 4 hours per video typing vague keywords into stock sites, downloading clips, syncing frame-by-frame, and losing focus on storytelling.</p>
+        </div>
+
+        <div class="problem-card hallucinated">
+          <span class="card-status">Generative AI Video</span>
+          <h3>Hallucinated & Uncanny</h3>
+          <p>Text-to-video engines invent floating limbs, liquid physics, and distorted backgrounds. Audiences immediately spot synthetic slop and click away.</p>
+        </div>
+
+        <div class="problem-card epoch-solution">
+          <span class="card-status">The Epoch Standard</span>
+          <h3>Real Footage, Verified Truth</h3>
+          <p>Authentic, cinematic footage from your own archive and cleared stock libraries. Snapped to your spoken words and fact-checked by Gemini 2.5 Flash.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section: The 4-Stage Pipeline -->
+  <section id="pipeline" class="section section-paper" style="padding-top: 0;">
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-chip">How It Works</span>
+        <h2 class="section-title">The 4-stage intelligent cutting pipeline</h2>
+        <p class="section-sub">Epoch operates like an experienced assistant video editor sitting right next to you.</p>
+      </div>
+
+      <div class="pipeline-steps">
+        <div class="pipeline-card">
+          <div class="step-num">STAGE 01</div>
+          <div class="step-icon">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/></svg>
+          </div>
+          <h3>1. Listen & Map</h3>
+          <p>Whisper extracts phoneme-level word boundaries and natural speech pauses, identifying distinct thematic beats across your timeline.</p>
+          <div class="step-meta">Sub-second word alignment</div>
+        </div>
+
+        <div class="pipeline-card">
+          <div class="step-num">STAGE 02</div>
+          <div class="step-icon">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          </div>
+          <h3>2. Plan & Anchor</h3>
+          <p>The planner determines which concepts demand visual reinforcement and selects optimal in/out cut points that never step over critical face moments.</p>
+          <div class="step-meta">Narrative beat curation</div>
+        </div>
+
+        <div class="pipeline-card">
+          <div class="step-num">STAGE 03</div>
+          <div class="step-icon">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <h3>3. Search & Fact-Check</h3>
+          <p>Multilingual text embeddings retrieve top candidates from 4,000+ indexed archive shots. Gemini performs multimodal fact-checking on each visual candidate.</p>
+          <div class="step-meta">Multimodal verification</div>
+        </div>
+
+        <div class="pipeline-card">
+          <div class="step-num">STAGE 04</div>
+          <div class="step-icon">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h3>4. Conform & Render</h3>
+          <p>FFmpeg renders the final video with seamless cut overlays. Your voice track is untouched, and a complete provenance certificate is created.</p>
+          <div class="step-meta">Lossless audio conform</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section: Real Showcase (travel-v3c Project) -->
+  <section id="showcase" class="section section-dark">
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-chip">Verified Project Showcase</span>
+        <h2 class="section-title">Inspected live from project: travel-v3c</h2>
+        <p class="section-sub">No synthetic mockup screens. This is authentic data produced by Epoch during real timeline rendering.</p>
+      </div>
+
+      <div class="showcase-frame">
+        <div class="showcase-topbar">
+          <div class="showcase-title-area">
+            <span class="showcase-proj-name">travel-v3c</span>
+            <span class="showcase-proj-id">ID: 20261003-045037-34b289</span>
+            <span id="showcase-anchor-tag" class="showcase-proj-id">Anchor: "Rajasthan"</span>
+          </div>
+          <span class="showcase-stage-badge">Conformed & Rendered</span>
+        </div>
+
+        <div class="showcase-layout">
+          <!-- Left: Visual Cuts Explorer -->
+          <div class="showcase-visuals">
+            <div class="visual-preview-box">
+              <img id="showcase-preview-img" src="/static/media/shots/travel_broll_cut_1.jpg" alt="Epoch cut preview: snow, mountain, range">
+              <span class="preview-tag rec">Conformed B-Roll Cut</span>
+            </div>
+
+            <!-- Slot Buttons -->
+            <div class="slot-selector-bar" role="tablist" aria-label="Project B-roll Slots">
+              <button class="slot-btn active" data-slot="0" type="button">
+                <b>Slot 01 (04.4s)</b>
+                <span>Rajasthan · Mountain</span>
+              </button>
+              <button class="slot-btn" data-slot="1" type="button">
+                <b>Slot 02 (06.0s)</b>
+                <span>Markets · Spices</span>
+              </button>
+              <button class="slot-btn" data-slot="2" type="button">
+                <b>Slot 03 (09.1s)</b>
+                <span>Train · Scenic Ridge</span>
+              </button>
+              <button class="slot-btn" data-slot="3" type="button">
+                <b>Slot 04 (12.4s)</b>
+                <span>Morning · Coffee</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Right: Inspector & Multimodal Truth Check -->
+          <div class="showcase-inspector">
+            <div>
+              <span style="font: 600 11px var(--mono); color: var(--ice-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 6px;">Spoken Transcript Excerpt</span>
+              <div id="showcase-quote" class="transcript-quote">
+                “Hi everyone, welcome back to the channel. Today I'm taking you on a week through Rajasthan and the Himalayas.”
+              </div>
+            </div>
+
+            <div class="truth-verdict-box">
+              <div class="truth-verdict-header">
+                <span class="truth-badge" id="showcase-verdict-badge">STOCK · not event footage</span>
+                <span style="font: 500 11px var(--mono); color: var(--ice-muted);">Gemini 2.5 Flash</span>
+              </div>
+              <p class="truth-reason">Gemini cross-examined candidate frames against spoken claims:</p>
+              <ul class="evidence-list" id="showcase-evidence-list">
+                <li>Stock footage (pixabay), not footage of the actual event in Rajasthan</li>
+                <li>No place evidence in the footage to confirm Rajasthan location</li>
+                <li>Recording date unknown; cannot confirm it is recent</li>
+              </ul>
+            </div>
+
+            <div>
+              <span style="font: 600 11px var(--mono); color: var(--ice-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 8px;">Conform Specifications</span>
+              <table class="spec-table">
+                <tbody>
+                  <tr><td>Shot Title</td><td id="showcase-shot-title">snow, mountain, range (#3976)</td></tr>
+                  <tr><td>Author / Source</td><td id="showcase-shot-author">DesignScape (Pixabay)</td></tr>
+                  <tr><td>Clearance</td><td id="showcase-shot-licence">Pixabay Content License (Free for commercial use)</td></tr>
+                  <tr><td>Cut Timing</td><td id="showcase-shot-timing">04.43s – 06.00s</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div style="margin-top: auto; padding-top: 12px;">
+              <a href="/app" class="btn btn-primary" style="width: 100%;">Open Project in Epoch Editor</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section: Three Pillars (True · Cuts · Yours) -->
+  <section id="pillars" class="section section-paper">
+    <div class="section-container">
+      <div class="section-header center">
+        <span class="section-chip">Core Philosophy</span>
+        <h2 class="section-title">The Three Pillars of Epoch</h2>
+        <p class="section-sub">A video tool engineered for truth, musical editing rhythm, and undisputed content ownership.</p>
+      </div>
+
+      <div class="pillars-grid">
+        <!-- Pillar 1: True -->
+        <div class="pillar-card">
+          <div class="pillar-glyph">I.</div>
+          <h3>True.</h3>
+          <p>B-roll must not deceive your audience. When you talk about the 1970 Apollo mission, you shouldn't get a 2024 SpaceX Falcon 9 rocket.</p>
+          <ul>
+            <li>Gemini 2.5 Flash reviews candidate video frames</li>
+            <li>Detects era, geography, subjects, weather, and actions</li>
+            <li>Highlights discrepancies before they reach your final render</li>
+          </ul>
+        </div>
+
+        <!-- Pillar 2: Cuts -->
+        <div class="pillar-card">
+          <div class="pillar-glyph">II.</div>
+          <h3>Cuts.</h3>
+          <p>Good editing has tempo. B-roll cut haphazardly across mid-syllable words sounds sloppy and disorients viewers.</p>
+          <ul>
+            <li>Whisper phoneme alignment starts cuts on the keyword</li>
+            <li>Detects speech pauses and breathing gaps for natural ins/outs</li>
+            <li>Leaves host audio completely intact with zero clipping</li>
+          </ul>
+        </div>
+
+        <!-- Pillar 3: Yours -->
+        <div class="pillar-card">
+          <div class="pillar-glyph">III.</div>
+          <h3>Yours.</h3>
+          <p>Every piece of footage carries legal consequences. Epoch tracks provenance so you never receive a surprise copyright claim.</p>
+          <ul>
+            <li>Automatic CC attribution and commercial clearance verification</li>
+            <li>Generates ready-to-publish end credits and description blocks</li>
+            <li>Supports your own local footage libraries with zero external fees</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section: Licence Sheet & Provenance -->
+  <section id="licence" class="section section-paper" style="padding-top: 0;">
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-chip">Provenance Ledger</span>
+        <h2 class="section-title">Clearance certificate baked into every export</h2>
+        <p class="section-sub">Here is the exact licence record generated for project travel-v3c. Completely transparent and ready for YouTube or commercial broadcast.</p>
+      </div>
+
+      <div class="licence-box">
+        <div class="table-responsive">
+          <table class="licence-table">
+            <thead>
+              <tr>
+                <th>Shot ID</th>
+                <th>Anchor / Keyword</th>
+                <th>Author</th>
+                <th>Source</th>
+                <th>Licence Classification</th>
+                <th>Commercial Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>#3976</code></td>
+                <td>Rajasthan</td>
+                <td>DesignScape</td>
+                <td>Pixabay</td>
+                <td><a href="https://pixabay.com/service/license-summary/" target="_blank" rel="noopener">Pixabay Content License</a></td>
+                <td><span style="color: var(--ok); font-weight: 600;">✓ Commercial Cleared</span></td>
+              </tr>
+              <tr>
+                <td><code>#11</code></td>
+                <td>Markets</td>
+                <td>Direct Archive</td>
+                <td>Local Vault</td>
+                <td>Owned Creator Footage</td>
+                <td><span style="color: var(--ok); font-weight: 600;">✓ 100% Owned</span></td>
+              </tr>
+              <tr>
+                <td><code>#3584</code></td>
+                <td>Train</td>
+                <td>Samsung C9</td>
+                <td>Pixabay</td>
+                <td><a href="https://pixabay.com/service/license-summary/" target="_blank" rel="noopener">Pixabay Content License</a></td>
+                <td><span style="color: var(--ok); font-weight: 600;">✓ Commercial Cleared</span></td>
+              </tr>
+              <tr>
+                <td><code>#3899</code></td>
+                <td>Coffee</td>
+                <td>Engin Akyurt</td>
+                <td>Pixabay</td>
+                <td><a href="https://pixabay.com/service/license-summary/" target="_blank" rel="noopener">Pixabay Content License</a></td>
+                <td><span style="color: var(--ok); font-weight: 600;">✓ Commercial Cleared</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section: Architecture & Local Engine -->
+  <section id="architecture" class="section section-dark">
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-chip">Engine Architecture</span>
+        <h2 class="section-title">Engineered to run locally on your machine</h2>
+        <p class="section-sub">Epoch indexes local folders and runs without cloud lock-in. Connect Gemini when you need deep multimodal checks.</p>
+      </div>
+
+      <div class="arch-grid">
+        <div class="arch-card">
+          <h3>Self-Contained Local Core</h3>
+          <p>FastAPI backend with SQLite database and ChromaDB embedding store. Indexes gigabytes of high-bitrate video footage into searchable scenes in minutes.</p>
+          <div class="arch-tags">
+            <span class="arch-tag">FastAPI</span>
+            <span class="arch-tag">SQLite</span>
+            <span class="arch-tag">ChromaDB</span>
+            <span class="arch-tag">FFmpeg</span>
+          </div>
+        </div>
+
+        <div class="arch-card">
+          <h3>Multilingual & Multimodal AI</h3>
+          <p>Search your footage in English or Hindi (e.g. <i>बारिश में सड़क पर ट्रैफिक</i>). Whisper phonetic alignment guarantees sync down to the individual audio sample.</p>
+          <div class="arch-tags">
+            <span class="arch-tag">Whisper</span>
+            <span class="arch-tag">Multilingual CLIP</span>
+            <span class="arch-tag">Gemini 2.5 Flash</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section: FAQ -->
+  <section id="faq" class="section section-paper">
+    <div class="section-container">
+      <div class="section-header center">
+        <span class="section-chip">Questions & Answers</span>
+        <h2 class="section-title">Frequently Asked Questions</h2>
+      </div>
+
+      <div class="faq-grid">
+        <details class="faq-item" open>
+          <summary class="faq-question">Can I use my own footage archives?</summary>
+          <p class="faq-answer">Yes, absolutely. Epoch includes a dedicated Libraries tab where you can register any local folder on your SSD or external drive. It automatically segments videos into scene shots and indexes them with embeddings.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-question">How does Gemini verify that a clip is true?</summary>
+          <p class="faq-answer">Epoch feeds representative keyframes from the candidate shot alongside your spoken sentence and narrative context to Gemini 2.5 Flash. It checks location markers, era consistency, subjects, and seasonal lighting, warning you if stock footage contradicts your speech.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-question">What happens if a cut starts during a spoken word?</summary>
+          <p class="faq-answer">Epoch's conform engine uses phonetic timestamps from Whisper to ensure the cut snaps precisely to the syllable onset or preceding breath pause. Your original microphone audio is conformed losslessly without any cuts or pitch shifts.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-question">Are the stock video clips safe for monetized YouTube videos?</summary>
+          <p class="faq-answer">Yes. Clips fetched via the live search integration come under the Pixabay Content License or Pexels License, which permit commercial use without mandatory attribution. Epoch also compiles an exportable credit block so you can paste it directly into your video description.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-question">What video formats can I upload?</summary>
+          <p class="faq-answer">Epoch accepts MP4, MOV, WebM, MKV, and AVI files up to 1 GB. Outputs are rendered in high-definition H.264 / AAC MP4 ready for immediate upload to YouTube, Vimeo, or social platforms.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final Call to Action -->
+  <section class="section section-paper" style="padding-top: 20px;">
+    <div class="section-container">
+      <div class="cta-box">
+        <h2>Start cutting with Epoch now</h2>
+        <p>No waiting lists or cloud queues. Open the local editor, drop in your video, and let Epoch assemble your B-roll in minutes.</p>
+        <div style="display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;">
+          <a href="/app" class="btn btn-primary btn-lg">Launch Epoch Editor</a>
+          <a href="/app#editor" class="btn btn-ghost-dark btn-lg">Upload Talking Head Video</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span class="logo-badge" style="width: 24px; height: 24px; border-radius: 6px; background: var(--night-2); display: inline-grid; place-items: center;" aria-hidden="true">
+          <svg viewBox="0 0 32 32" style="width: 10px; height: 10px; fill: var(--ice);"><path d="M12 9.5v13l11-6.5z"/></svg>
+        </span>
+        <span style="font-weight: 600; color: #ffffff;">Epoch</span>
+        <span>— Archival Speech-Synchronized B-roll Engine</span>
+      </div>
+      <ul class="footer-links">
+        <li><a href="/app">Editor App</a></li>
+        <li><a href="#why">Why Epoch</a></li>
+        <li><a href="#pipeline">Pipeline</a></li>
+        <li><a href="#showcase">Project Proof</a></li>
+        <li><a href="https://github.com" target="_blank" rel="noopener">GitHub</a></li>
+      </ul>
+      <div>
+        <span>© 2026 Epoch. Crafted with natural film tones & zero purple AI slop.</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Vendor Scripts (Self-Hosted GSAP & ScrollTrigger) -->
+  <script src="/static/vendor/gsap.min.js"></script>
+  <script src="/static/vendor/ScrollTrigger.min.js"></script>
+
+  <!-- Application Landing Page Engines -->
+  <script src="/static/hero.js"></script>
+  <script src="/static/landing.js"></script>
+</body>
+</html>

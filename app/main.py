@@ -290,7 +290,16 @@ async def unhandled(_, exc):
 
 @app.get("/")
 def home():
-    return FileResponse(STATIC / "index.html")
+    landing = STATIC / "landing.html"
+    if landing.exists():
+        return FileResponse(landing)
+    return FileResponse(STATIC / "app.html")
+
+
+@app.get("/app")
+def app_view():
+    return FileResponse(STATIC / "app.html")
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+

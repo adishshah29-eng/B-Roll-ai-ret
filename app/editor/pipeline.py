@@ -6,7 +6,9 @@ render  : ffmpeg overlay of the chosen clips on the A-roll (original audio kept)
 """
 import json
 import threading
+import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 from .. import db, planner
@@ -45,9 +47,10 @@ def _fuse(results: list) -> list:
     for res in results:
         ranked = [x for x in [res.get("shot") or res.get("suggested"), *(res.get("alts") or [])] if x]
         for rank, sh in enumerate(ranked):
-            score[sh["id"]] = score.get(sh["id"], 0.0) + 1.0 / (RRF_K + rank)
-            shots.setdefault(sh["id"], sh)
-    return [shots[i] for i in sorted(score, key=lambda k: -score[k])]
+            k = ("s", sh["stock_id"]) if sh.get("stock_id") is not None else ("f", sh.get("file_id"), sh["id"] if sh.get("file_id") is None else 0)
+            score[k] = score.get(k, 0.0) + 1.0 / (RRF_K + rank)     # one entry per video: a clip must not fill the pool twice
+            shots.setdefault(k, sh)
+    return [shots[k] for k in sorted(score, key=lambda k: -score[k])]
 
 
 def _fill(searcher, slot_list: list, **flags) -> list:
@@ -75,33 +78,66 @@ def _fill(searcher, slot_list: list, **flags) -> list:
     return out
 
 
+def _safe(fn, *a):
+    try:
+        return fn(*a)
+    except Exception as e:                      # a helper step must never sink the project
+        print(f"{getattr(fn, '__name__', 'step')} failed: {type(e).__name__}")
+        return None
+
+
 def finish(searcher, placed: list, lib, also, live_on: bool) -> dict:
-    """Gemini's second look at the picks: (1) judge the pictures, (2) rewrite the search for spots where nothing fit and try
-    again once, (3) choose where in each clip the cutaway starts. Each step is skipped, never fatal, if Gemini is unavailable."""
-    out = {"judge": None, "repair": None, "inpoint": None}
+    """Gemini's second look at the picks: (1) judge the pictures (it also writes new searches for spots where nothing fits),
+    (2) search again for those spots, (3) choose where in each clip the cutaway starts. Step 3 runs for the spots that are already
+    fine WHILE step 2 searches and downloads, so the two overlap. Each step is skipped, never fatal, without Gemini."""
+    out = {"judge": None, "repair": None, "inpoint": None, "timings": {}}
     if llm.provider_name() != "gemini":
         return out
-    out["judge"] = judge.check(placed)
+    t = time.time()
+    out["judge"] = _safe(judge.check, placed)
+    out["timings"]["judge"] = round(time.time() - t, 1)
     bad = {i: s for i, s in enumerate(placed) if not s.get("locked") and (s.get("judge") or {}).get("good") == 0}
+    fine = [s for i, s in enumerate(placed) if i not in bad]
+    pool = ThreadPoolExecutor(1)
+    early = pool.submit(_safe, inpoint.refine, fine) if fine else None      # overlaps with the repair below
+    t = time.time()
+    repaired = []
     if bad and out["judge"] and out["judge"].get("ok"):
-        new = judge.rewrite_queries(bad)
+        new = {}
+        for i, s in bad.items():
+            tried = {q.lower() for q in [s.get("query") or "", *(s.get("alt_queries") or [])]}
+            qs = [q for q in (s.get("judge") or {}).get("queries", []) if q and q.lower() not in tried]
+            if qs:
+                new[i] = qs[:3]
+        missing = {i: s for i, s in bad.items() if i not in new}
+        if missing:                              # the judge gave no new searches for these: ask separately
+            new.update(_safe(judge.rewrite_queries, missing) or {})
         if new:
             if live_on:
                 qs = [q for lst in new.values() for q in lst]
-                live.fetch(qs, searcher, library_id=lib or also, n_main=len(qs))
+                _safe(live.fetch, qs, searcher, None, lib or also, len(qs))
             redo = [{**placed[i], "query": new[i][0], "alt_queries": new[i][1:3]} for i in new]
             refilled = _fill(searcher, redo, library=lib, also_lib=also)
-            judge.check(refilled, per_slot=judge.PER_SLOT_RETRY)
+            _safe(judge.check, refilled, judge.PER_SLOT_RETRY)
             fixed = 0
             for i, r in zip(new, refilled):
                 r["repaired"] = True
                 if r.get("shot"):
                     placed[i] = {**placed[i], **r}
+                    repaired.append(placed[i])
                     fixed += 1
                 else:
                     placed[i]["alt_queries"] = [*placed[i].get("alt_queries", []), *new[i]][:4]
             out["repair"] = {"tried": len(new), "fixed": fixed}
-    out["inpoint"] = inpoint.refine(placed)
+    out["timings"]["repair"] = round(time.time() - t, 1)
+    t = time.time()
+    late = _safe(inpoint.refine, repaired) if repaired else None
+    first = early.result() if early else None
+    pool.shutdown(wait=False)
+    out["timings"]["inpoint_wait"] = round(time.time() - t, 1)
+    parts = [x for x in (first, late) if x]
+    out["inpoint"] = ({"ok": all(x.get("ok") for x in parts), "spots": sum(x.get("spots", 0) for x in parts),
+                       "moved": sum(x.get("moved", 0) for x in parts)} if parts else None)
     return out
 
 
@@ -128,34 +164,55 @@ def live_library(pid: str, proj: dict) -> int:
     return lid
 
 
+class _Clock:
+    """Seconds spent per stage, saved on the project so a slow run can be explained."""
+
+    def __init__(self):
+        self.t0 = self.t = time.time()
+        self.laps = {}
+
+    def lap(self, name: str):
+        now = time.time()
+        self.laps[name] = round(now - self.t, 1)
+        self.t = now
+
+    def done(self) -> dict:
+        return {**self.laps, "total": round(time.time() - self.t0, 1)}
+
+
 def analyse_project(pid: str, searcher):
     d = store.folder(pid)
     proj = store.load(pid)
     try:
+        clock = _Clock()
         store.set_status(pid, "preparing video", 0.04)
         work = d / "work.mp4"
         ffmpeg.normalise(d / proj["source"], work)
         info = ffmpeg.probe(work)
         proj.update(duration=info["duration"], width=info["width"], height=info["height"], has_audio=info["has_audio"])
+        clock.lap("prepare")
 
         store.set_status(pid, "splitting the picture into scenes", 0.10)
-        scan = split.video_scan(work, d / "frames")
-
-        if info["has_audio"]:
-            store.set_status(pid, "transcribing the audio", 0.16)
-            tr = analyse.transcribe(work, lambda f: store.set_status(pid, "transcribing the audio", 0.16 + 0.44 * f))
-        else:
-            tr = {"language": None, "duration": info["duration"], "segments": []}
+        with ThreadPoolExecutor(1) as ex:                      # picture scan (OpenCV) runs while Whisper listens
+            scan_f = ex.submit(split.video_scan, work, d / "frames")
+            if info["has_audio"]:
+                store.set_status(pid, "transcribing the audio", 0.16)
+                tr = analyse.transcribe(work, lambda f: store.set_status(pid, "transcribing the audio", 0.16 + 0.44 * f))
+            else:
+                tr = {"language": None, "duration": info["duration"], "segments": []}
+            scan = scan_f.result()
         (d / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False), encoding="utf-8")
         segs = rules.align_script(tr["segments"], proj.get("script"))
+        clock.lap("audio+picture")
 
         store.set_status(pid, "building clips from audio and picture", 0.62)
         units = split.build_units(segs, scan["cuts"], scan["strip"], info["duration"])
-        fmap = analyse.face_map(work)
 
         eng = llm.provider_name()
         store.set_status(pid, f"reading the script ({'Gemini' if eng == 'gemini' else 'offline engine'})", 0.66)
-        plan = llm.plan(units, scan["cuts"], info["duration"], fmap, proj.get("script"), segs)
+        # the face map only helps the offline engine's spot rules, so it is computed only if Gemini fails or is absent
+        plan = llm.plan(units, scan["cuts"], info["duration"], lambda: analyse.face_map(work), proj.get("script"), segs)
+        clock.lap("script->queries (LLM)")
 
         lib = proj.get("library")
         fetched = {"added": 0, "queries": []}
@@ -168,18 +225,21 @@ def analyse_project(pid: str, searcher):
             fetched = live.fetch(qs, searcher,
                                  lambda f, q: store.set_status(pid, f"fetching B-roll from Pixabay: {q}", 0.72 + 0.14 * f),
                                  library_id=lib or also, n_main=n_main)
+        clock.lap("fetch+embed clips")
 
         store.set_status(pid, "placing B-roll", 0.88)
         placed = _fill(searcher, plan["slots"], library=lib, also_lib=also)
+        clock.lap("place")
         verdict = None
         if llm.provider_name() == "gemini":
             store.set_status(pid, "Gemini is checking the pictures and choosing where each clip starts", 0.93)
             verdict = finish(searcher, placed, lib, also, live_on=bool(proj.get("live_search", lib is None)))
+            clock.lap("Gemini check+repair+in-points")
         proj.update(language=tr["language"], segments=segs, units=units, cuts=scan["cuts"], shots=scan["shots"],
                     strip=scan["strip"], strip_every=split.STRIP_EVERY_S,
                     llm={"provider": plan["provider"], "summary": plan.get("summary", ""), "ms": plan.get("ms"),
                          "error": plan.get("error"), "slots": len(plan["slots"])},
-                    live=fetched, judge=verdict, slot_source=plan["provider"], slots=placed, stage="ready")
+                    live=fetched, judge=verdict, slot_source=plan["provider"], slots=placed, stage="ready", timings=clock.done())
         store.save(pid, proj)
         store.set_status(pid, "ready", 1.0)
     except Exception as e:

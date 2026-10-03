@@ -62,8 +62,10 @@ def _archive(item):
 PICKERS = {"pixabay": _pixabay, "commons": _commons, "archive": _archive}
 
 
-def ensure_file(stock_id: int):
-    """Return the `files` row for a stock item, downloading it first if needed. Raises NotHydratable."""
+def ensure_file(stock_id: int, index: bool = True):
+    """Return the `files` row for a stock item, downloading it first if needed. Raises NotHydratable.
+    index=False skips queueing the full background shot analysis (the editor only needs a few frames, and that job
+    competes for CPU and the database while a project is being analysed)."""
     c = db.conn()
     f = c.execute("SELECT * FROM files WHERE stock_id=? AND status IN ('ok','hydrated') ORDER BY id LIMIT 1",
                   (stock_id,)).fetchone()
@@ -87,7 +89,8 @@ def ensure_file(stock_id: int):
                item["library_id"]))
     c.commit()
     f = c.execute("SELECT * FROM files WHERE path=?", (str(dest.resolve()),)).fetchone()
-    jobs.enqueue("file", f["id"], jobs.STAGE_INDEX, priority=7)   # full shot analysis in the background
+    if index:
+        jobs.enqueue("file", f["id"], jobs.STAGE_INDEX, priority=7)   # full shot analysis in the background
     return f
 
 

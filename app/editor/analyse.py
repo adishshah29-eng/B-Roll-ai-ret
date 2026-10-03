@@ -1,10 +1,11 @@
 """Read the A-roll: speech (faster-whisper) + where the speaker's face dominates (OpenCV Haar)."""
 import gc
+import os
 
 import cv2
 import numpy as np
 
-WHISPER_SIZE = "small"
+WHISPER_SIZE = os.getenv("WHISPER_MODEL", "small")     # "base" is ~3x faster, a little less accurate
 FACE_STEP_S = 0.5
 FACE_BIG = 0.22          # face width / frame width above which the speaker "owns" the frame
 
@@ -12,7 +13,7 @@ FACE_BIG = 0.22          # face width / frame width above which the speaker "own
 def transcribe(path, progress=None) -> dict:
     """-> {"language", "segments": [{"start","end","text","words":[{"w","s","e"}]}]}. Model freed after use (RAM)."""
     from faster_whisper import WhisperModel
-    model = WhisperModel(WHISPER_SIZE, device="cpu", compute_type="int8")
+    model = WhisperModel(WHISPER_SIZE, device="cpu", compute_type="int8", cpu_threads=os.cpu_count() or 4)
     try:
         segs, info = model.transcribe(str(path), word_timestamps=True, vad_filter=True, beam_size=1)
         out = []

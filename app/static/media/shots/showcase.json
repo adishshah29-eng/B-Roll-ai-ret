@@ -1,0 +1,168 @@
+{
+  "project_id": "20261003-045037-34b289",
+  "name": "travel-v3c",
+  "slots_count": 4,
+  "slots": [
+    {
+      "start": 4.43,
+      "end": 6.0,
+      "text": "Hi everyone, welcome back to the channel. Today I'm taking you on a week through Rajasthan and the Himalayas.",
+      "anchor": "Rajasthan",
+      "query": "amber fort jaipur",
+      "reason": "Visualizes the destination of Rajasthan with iconic heritage architecture.",
+      "shot": {
+        "id": 3976,
+        "title": "snow, mountain, range",
+        "author": "DesignScape",
+        "source": "pixabay",
+        "licence": {
+          "class": "safe",
+          "label": "Free to use",
+          "commercial": true,
+          "text": "Pixabay Content License",
+          "url": "https://pixabay.com/service/license-summary/"
+        },
+        "verdict": {
+          "status": "warn",
+          "checks": {
+            "place": {
+              "status": "unverified",
+              "evidence": "No place evidence in the footage to confirm Rajasthan"
+            },
+            "time": {
+              "status": "unverified",
+              "evidence": "Recording date unknown; cannot confirm it is recent"
+            },
+            "stock": {
+              "status": "warn",
+              "evidence": "Stock footage (pixabay), not footage of the actual event in Rajasthan"
+            }
+          },
+          "evidence": [
+            "Stock footage (pixabay), not footage of the actual event in Rajasthan"
+          ],
+          "label": "STOCK \u00b7 not event footage",
+          "delta": -0.01
+        },
+        "thumb": "/static/media/shots/shot_3976.jpg"
+      }
+    },
+    {
+      "start": 11.21,
+      "end": 14.5,
+      "text": "We start in Jaipur where the pink city markets are are loud colorful and full of spices.",
+      "anchor": "markets",
+      "query": "indian market spices",
+      "reason": "Shows the colorful, bustling spice markets of Jaipur mentioned by the speaker.",
+      "shot": {
+        "id": 11,
+        "title": null,
+        "author": null,
+        "source": "own",
+        "licence": {
+          "class": "own",
+          "label": "Your footage",
+          "commercial": true,
+          "text": "",
+          "url": ""
+        },
+        "verdict": {
+          "status": "unverified",
+          "checks": {
+            "place": {
+              "status": "unverified",
+              "evidence": "No place evidence in the footage to confirm Jaipur"
+            }
+          },
+          "evidence": [
+            "No place evidence in the footage to confirm Jaipur"
+          ],
+          "label": null,
+          "delta": 0
+        },
+        "thumb": "/static/media/shots/shot_11.jpg"
+      }
+    },
+    {
+      "start": 17.29,
+      "end": 20.0,
+      "text": "Then a long train ride north crossing rivers and open fields before the mountains appear.",
+      "anchor": "train",
+      "query": "indian train window",
+      "reason": "Captures the experience of the long train ride heading north.",
+      "shot": {
+        "id": 3584,
+        "title": "High Speed Train, Samsung C9 - Non Stop Train",
+        "author": "Village Regional",
+        "source": "commons",
+        "licence": {
+          "class": "attribution",
+          "label": "Credit required",
+          "commercial": true,
+          "text": "CC BY 3.0",
+          "url": "https://creativecommons.org/licenses/by/3.0",
+          "credit": "\u201cHigh Speed Train, Samsung C9 - Non Stop Train\u201d by Village Regional. CC BY 3.0. https://commons.wikimedia.org/wiki/File:High_Speed_Train,_Samsung_C9_-_Non_Stop_Train.webm"
+        },
+        "verdict": {
+          "status": "unverified",
+          "checks": {
+            "place": {
+              "status": "unverified",
+              "evidence": "Only coarse evidence (India); cannot confirm Jaipur"
+            }
+          },
+          "evidence": [
+            "Only coarse evidence (India); cannot confirm Jaipur"
+          ],
+          "label": null,
+          "delta": 0
+        },
+        "thumb": "/static/media/shots/shot_3584.jpg"
+      }
+    },
+    {
+      "start": 24.5,
+      "end": 27.5,
+      "text": "Finally Manali snow on the peaks hot chai in my hands. Let me know in the comments where you'd go next.",
+      "anchor": null,
+      "query": "hot chai cup",
+      "reason": "Provides a cozy, sensory visual of holding hot chai in the cold mountain weather.",
+      "shot": {
+        "id": 3899,
+        "title": "coffee, cup, espresso",
+        "author": "Engin_Akyurt",
+        "source": "pixabay",
+        "licence": {
+          "class": "safe",
+          "label": "Free to use",
+          "commercial": true,
+          "text": "Pixabay Content License",
+          "url": "https://pixabay.com/service/license-summary/"
+        },
+        "verdict": {
+          "status": "warn",
+          "checks": {
+            "place": {
+              "status": "unverified",
+              "evidence": "No place evidence in the footage to confirm Manali"
+            },
+            "weather": {
+              "status": "unverified",
+              "evidence": "Weather not determinable from the footage"
+            },
+            "stock": {
+              "status": "warn",
+              "evidence": "Stock footage (pixabay), not footage of the actual event in Manali"
+            }
+          },
+          "evidence": [
+            "Stock footage (pixabay), not footage of the actual event in Manali"
+          ],
+          "label": "STOCK \u00b7 not event footage",
+          "delta": -0.01
+        },
+        "thumb": "/static/media/shots/shot_3899.jpg"
+      }
+    }
+  ]
+}

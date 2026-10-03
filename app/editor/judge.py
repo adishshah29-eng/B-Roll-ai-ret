@@ -36,7 +36,11 @@ the picture must show what is being talked about (the real subject, not just som
 Reject: sci-fi/neon/CGI imagery when the topic is real-world, green-screen or animated intro/subscribe templates, pictures of a
 different subject that merely shares a keyword, and anything unrelated.
 
-Return JSON only: {"spots": [{"spot": int, "good": [candidate numbers, best first, [] if none is good], "reason": "one short sentence"}]}
+If NO candidate for a spot is good, also give "queries": 3 new stock-site searches for that spot (2-4 plain English words about ONE
+concrete, filmable subject, different from the search used, based on what was missing; prefer real footage over abstract/CGI imagery;
+never use the words: {banned}).
+
+Return JSON only: {{"spots": [{{"spot": int, "good": [candidate numbers, best first, [] if none is good], "reason": "one short sentence", "queries": [str, str, str] (only when good is [])}}]}}
 """
 
 
@@ -44,7 +48,8 @@ def check(slots: list, per_slot: int = PER_SLOT) -> dict | None:
     """Annotate `slots` in place with `judge` and re-order/replace picks. Returns a small status dict, or None if skipped."""
     if not gemini.enabled():
         return None
-    parts, index, n_img = [{"text": PROMPT}], {}, 0
+    from . import llm
+    parts, index, n_img = [{"text": PROMPT.format(banned=", ".join(llm.BANNED))}], {}, 0
     for i, s in enumerate(slots):
         if s.get("locked"):
             continue
@@ -77,6 +82,8 @@ def check(slots: list, per_slot: int = PER_SLOT) -> dict | None:
         ok = [cands[g - 1] for g in good if 1 <= g <= len(cands)]
         rest = [c for c in cands if c not in ok]
         s["judge"] = {"by": "gemini", "good": len(ok), "of": len(cands), "reason": str(r.get("reason", ""))[:160]}
+        if not ok and r.get("queries"):
+            s["judge"]["queries"] = [llm.clean_query(q) for q in r["queries"] if str(q).strip()][:3]
         s["alts"] = ok[1:] + rest + [a for a in (s.get("alts") or []) if a.get("id") not in {c["id"] for c in cands}]
         s["alts"] = s["alts"][:12]
         cur = s.get("shot") or s.get("suggested")
