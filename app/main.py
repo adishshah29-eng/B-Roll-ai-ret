@@ -79,6 +79,7 @@ class PlanReq(BaseModel):
     library: int | None = None
     cut_weight: float | None = None
     today: str | None = None            # ISO date to evaluate "today/this week" against (demo + tests)
+    strict: bool = True                 # Gemini looks at every shot against its line + the script's topic; irrelevant ones are dropped
 
 
 class ExportReq(BaseModel):
@@ -190,6 +191,12 @@ def make_plan(req: PlanReq):
     out = planner.plan(state["search"], req.script, wpm=req.wpm, use_truth=req.use_truth, today=req.today,
                        use_cuts=req.use_cuts, cut_weight=req.cut_weight, use_memory=req.use_memory,
                        library=req.library)
+    if req.strict:
+        try:
+            from .editor import relevance
+            relevance.filter_plan(state["search"], out, req.script, req)
+        except Exception as e:                       # never lose the plan because the checker failed
+            out["relevance"] = {"strict": True, "checked": False, "error": f"{type(e).__name__}: {e}"}
     out["took_ms"] = round((time.perf_counter() - t0) * 1000, 1)
     return out
 

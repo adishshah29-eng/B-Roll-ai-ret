@@ -25,6 +25,7 @@
   <symbol id="i-wave" viewBox="0 0 16 16"><path d="M2 8h1.5M5 5v6M8 3v10M11 5.5v5M14 8h-1"/></symbol>
   <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 2.5l1.3 3.2 3.2 1.3-3.2 1.3L8 11.5 6.7 8.3 3.5 7l3.2-1.3zM12.5 11l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/></symbol>
   <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></symbol>
+  <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5V10M5 7.2l3 3 3-3M3 11v1.5A1.5 1.5 0 004.5 14h7a1.5 1.5 0 001.5-1.5V11"/></symbol>
   <symbol id="i-scissors" viewBox="0 0 16 16"><circle cx="4.5" cy="4.5" r="1.8"/><circle cx="4.5" cy="11.5" r="1.8"/><path d="M6 5.6L13.5 12M6 10.4L13.5 4"/></symbol>
 </svg>
 
@@ -109,6 +110,7 @@
       </select></label>
       <label class="toggle" title="Boost shots you chose before for similar lines, and your house style"><input type="checkbox" id="memOn" checked> Use my edit history</label>
       <label class="toggle" title="Check every shot against the claims in the narration: place, date, weather"><input type="checkbox" id="truthOn" checked> Check footage against narration</label>
+      <label class="toggle" title="Gemini looks at every picture against its line and the script's topic. Shots that do not fit are dropped, and empty beats are filled from Pixabay when possible. Slower."><input type="checkbox" id="strictOn" checked> Only show shots Gemini confirms fit (slower)</label>
       <span class="spacer"></span>
       <span id="planMeta" class="meta" role="status" aria-live="polite"></span>
       <button id="playSeqBtn" class="ghost" disabled><svg class="i" aria-hidden="true"><use href="#i-play"/></svg>Play sequence</button>
@@ -159,7 +161,17 @@
 
     <div id="edWork" hidden>
       <div class="edtop"><button id="edBack" class="ghost"><svg class="i" aria-hidden="true"><use href="#i-back"/></svg>Projects</button><b id="edTitle"></b><span id="edInfo" class="meta"></span>
-        <span class="spacer"></span><button id="edAdd" class="ghost"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>B-roll at playhead</button>
+        <span class="spacer"></span><button id="edAdd" class="ghost" title="Add a spot at the playhead and let the engine fill it"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>B-roll at playhead</button>
+        <div class="menu" id="edExport">
+          <button id="edExportBtn" class="ghost" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="edExportList"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Export</button>
+          <div class="menu-list" id="edExportList" role="menu" hidden>
+            <button type="button" role="menuitem" data-fmt="zip"><b>Everything (.zip)</b><small>XML, EDL, captions, licences, the B-roll clips and the rendered MP4</small></button>
+            <button type="button" role="menuitem" data-fmt="xml"><b>Premiere Pro / DaVinci Resolve (.xml)</b><small>V1 your video · V2 B-roll · A1 your audio</small></button>
+            <button type="button" role="menuitem" data-fmt="edl"><b>EDL (.edl)</b><small>B-roll events on your video's timeline</small></button>
+            <button type="button" role="menuitem" data-fmt="srt"><b>Captions (.srt)</b><small>what is said, from the transcript</small></button>
+            <button type="button" role="menuitem" data-fmt="credits"><b>Licences and credits (.txt)</b><small>what to credit, commercial use per clip</small></button>
+          </div>
+        </div>
         <button id="edRender" class="primary">Render video</button></div>
       <div id="edSummary" class="edsum"></div>
       <div class="edstage">
@@ -169,8 +181,25 @@
       </div>
       <div class="edwrap"><div class="edlanes"><span>B-ROLL</span><span>FRAMES</span><span>SPEECH</span></div>
         <div id="edTimeline" class="edtl"><div id="edHead" class="edhead"></div></div></div>
+      <div class="hint tlhint">Drag a clip from Suggested, Search library or Alternatives onto the timeline to add it there.</div>
       <div id="edTranscript" class="edtr"></div>
-      <div id="edPanel"></div>
+      <div class="edside">
+        <div class="segtabs" id="edTabs" role="tablist" aria-label="Clip tools">
+          <button type="button" role="tab" data-pane="spot" aria-selected="true" class="on">Spot</button>
+          <button type="button" role="tab" data-pane="sugg" aria-selected="false">Suggested</button>
+          <button type="button" role="tab" data-pane="find" aria-selected="false">Search library</button>
+        </div>
+        <div id="edPanel" role="tabpanel"></div>
+        <div id="edSugg" role="tabpanel" hidden></div>
+        <div id="edFind" role="tabpanel" hidden>
+          <form id="edFindForm" class="findbar" autocomplete="off">
+            <input id="edFindQ" type="search" aria-label="Search your footage" placeholder="Search footage, e.g. busy street market at night">
+            <button type="submit" class="primary sm">Search</button>
+          </form>
+          <div id="edFindMeta" class="meta" role="status" aria-live="polite"></div>
+          <div id="edFindRes" class="sgrid"></div>
+        </div>
+      </div>
       <div id="edOut" role="status" aria-live="polite"></div>
     </div>
   </section>

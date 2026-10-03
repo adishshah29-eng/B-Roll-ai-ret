@@ -167,13 +167,17 @@ $("#planBtn").addEventListener("click", async () => {
   const script = $("#script").value.trim();
   if (!script) return;
   $("#planBtn").disabled = true;
+  $("#planMeta").textContent = $("#strictOn").checked ? "Planning, then Gemini checks every picture (up to about a minute)…" : "Planning…";
   try {
     const mode = $("#cutMode").value;
-    PLAN = await api("/api/plan", { script, library: +$("#planLib").value || null, use_truth: $("#truthOn").checked, use_memory: $("#memOn").checked, use_cuts: mode !== "greedy", cut_weight: mode === "smooth" ? 0.8 : null });
+    PLAN = await api("/api/plan", { script, library: +$("#planLib").value || null, use_truth: $("#truthOn").checked, strict: $("#strictOn").checked, use_memory: $("#memOn").checked, use_cuts: mode !== "greedy", cut_weight: mode === "smooth" ? 0.8 : null });
     renderPlan();
     renderSeqSummary();
     $("#playSeqBtn").disabled = !PLAN.beats.some((x) => x.chosen.length);
-    $("#planMeta").textContent = `${PLAN.beats.length} beats · planned in ${PLAN.took_ms} ms`;
+    const R = PLAN.relevance;
+    $("#planMeta").textContent = `${PLAN.beats.length} beats · planned in ${(PLAN.took_ms / 1000).toFixed(1)} s`
+      + (R && R.checked ? ` · pictures checked${R.rescued ? `, ${R.rescued} beat(s) filled from Pixabay` : ""}${R.unmatched ? `, ${R.unmatched} left empty (nothing fit)` : ""}`
+        : (R && R.reason ? ` · ${R.reason}` : (R && R.error ? " · picture check failed, showing unchecked shots" : "")));
     document.querySelectorAll(".export").forEach((b) => (b.disabled = !PLAN.beats.some((x) => x.chosen.length)));
   } catch (e) { $("#plan").replaceChildren(el("div", { class: "err" }, e.message)); }
   $("#planBtn").disabled = false;
@@ -244,9 +248,11 @@ function renderPlan() {
   const root = $("#plan");
   root.replaceChildren();
   PLAN.beats.forEach((b, bi) => {
-    const none = b.n_rejected
-      ? `No truthful shot found — ${b.n_rejected} candidate(s) contradict the narration (see below).`
-      : "No relevant shot found for this line.";
+    const none = b.no_match
+      ? `Nothing in your library${PLAN.relevance && PLAN.relevance.rescued !== undefined ? " or on Pixabay" : ""} clearly fits this line, so no shot is shown instead of an irrelevant one.${b.relevance && b.relevance.reason ? " Gemini: " + b.relevance.reason : ""}`
+      : b.n_rejected
+        ? `No truthful shot found — ${b.n_rejected} candidate(s) contradict the narration (see below).`
+        : "No relevant shot found for this line.";
     const chosen = el("div", { class: "chosen" }, b.chosen.length
       ? b.chosen.map((s) => el("div", { class: "chosen-item" }, card(s, false), verdictBlock(s), whyBlock(s)))
       : el("div", { class: "nomatch" }, none));

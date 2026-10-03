@@ -25,7 +25,7 @@ def client():
 
 
 def plan(client, script, **kw):
-    r = client.post("/api/plan", json={"script": script, "today": "2026-10-03", **kw})
+    r = client.post("/api/plan", json={"script": script, "today": "2026-10-03", "strict": False, **kw})   # strict = Gemini picture check: network, not unit-testable
     assert r.status_code == 200, r.text
     return r.json()
 

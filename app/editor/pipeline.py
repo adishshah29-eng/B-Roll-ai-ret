@@ -13,7 +13,7 @@ from datetime import date
 
 from .. import db, planner
 from ..sources import hydrate
-from . import analyse, ffmpeg, inpoint, judge, live, llm, slots as rules, split, store
+from . import analyse, ffmpeg, inpoint, judge, live, llm, slots as rules, split, store, suggest
 
 
 MIN_CONF = 0.31      # below this relevance a spot is left empty (best guess kept as `suggested`): precision over recall
@@ -28,7 +28,7 @@ def _fill_once(searcher, slot_list: list, use_truth=True, use_cuts=True, use_mem
                      today=date.today().isoformat(), library=library, also_lib=also_lib, style_prior=False)
     out = []
     for s, b in zip(slot_list, p["beats"]):
-        out.append({**{k: s[k] for k in ("start", "end", "text", "query", "alt_queries", "reason", "anchor") if k in s},
+        out.append({**{k: s[k] for k in ("start", "end", "text", "query", "alt_queries", "reason", "anchor", "importance", "visual", "role") if k in s},
                     "shot": b["chosen"][0] if b["chosen"] else None, "alts": b["alts"][:12],
                     "rejected": b["rejected"][:3], "n_rejected": b["n_rejected"], "claims": b.get("claims")})
     for o in out:
@@ -141,6 +141,46 @@ def finish(searcher, placed: list, lib, also, live_on: bool) -> dict:
     return out
 
 
+def ensure_broll(searcher, proj: dict, live_on: bool) -> dict:
+    """A video must end up with at least one B-roll. If every spot came out empty, work on the most important spot: fetch
+    topic-specific clips, take the one Gemini confirms fits; only if none fits, use the best-scoring clip and flag it
+    'low confidence' so the editor sees it must be checked."""
+    slots = proj.get("slots") or []
+    if not slots or any(s.get("shot") for s in slots):
+        return {"needed": False}
+    s = max(slots, key=lambda x: float(x.get("importance", 0)))
+    text = s.get("text") or ""
+    summary = (proj.get("llm") or {}).get("summary") or ""
+    qs = judge.topic_queries(summary, suggest.topic_words(proj), text, n=4)
+    lib = proj.get("library")
+    also = proj.get("live_library") if not lib else None
+    if live_on and qs:
+        if lib is None:
+            also = live_library(proj["id"], proj)
+        _safe(live.fetch, qs, searcher, None, lib or also, len(qs))
+    allq = list(dict.fromkeys(suggest.queries(proj, text, s.get("query") or "", s.get("alt_queries") or []) + qs))
+    cands = suggest.candidates(searcher, proj, allq, 24)
+    if not cands:
+        return {"needed": True, "ok": False, "why": "no candidates in the library"}
+    ranked = suggest.rank(proj, text, cands)
+    pick, low = None, False
+    if ranked and ranked.get("order"):
+        best = min(ranked["order"], key=ranked["order"].get)
+        pick = next((c for c in cands if c["id"] == best), None)
+    if pick is None:
+        vp = suggest.video_places(proj)
+        pick = next((c for c in cands if not suggest.wrong_place(c, vp)), cands[0])
+        low = True
+    s["shot"] = pick
+    s.pop("suggested", None)
+    s["alts"] = [c for c in cands if c["id"] != pick["id"]][:12]
+    s["rescued"] = True
+    if low:
+        s["low_confidence"] = True
+    _safe(inpoint.refine, [s])
+    return {"needed": True, "ok": True, "low_confidence": low, "queries": qs}
+
+
 def queries_for(slot_list: list) -> tuple:
     """(queries, n_main): every spot's main query first, then all its alternative phrasings."""
     mains = [s.get("query") for s in slot_list if s.get("query")]
@@ -211,7 +251,8 @@ def analyse_project(pid: str, searcher):
         eng = llm.provider_name()
         store.set_status(pid, f"reading the script ({'Gemini' if eng == 'gemini' else 'offline engine'})", 0.66)
         # the face map only helps the offline engine's spot rules, so it is computed only if Gemini fails or is absent
-        plan = llm.plan(units, scan["cuts"], info["duration"], lambda: analyse.face_map(work), proj.get("script"), segs)
+        plan = llm.plan(units, scan["cuts"], info["duration"], lambda: analyse.face_map(work), proj.get("script"), segs,
+                        proj.get("density") or "balanced")
         clock.lap("script->queries (LLM)")
 
         lib = proj.get("library")
@@ -239,7 +280,11 @@ def analyse_project(pid: str, searcher):
                     strip=scan["strip"], strip_every=split.STRIP_EVERY_S,
                     llm={"provider": plan["provider"], "summary": plan.get("summary", ""), "ms": plan.get("ms"),
                          "error": plan.get("error"), "slots": len(plan["slots"])},
-                    live=fetched, judge=verdict, slot_source=plan["provider"], slots=placed, stage="ready", timings=clock.done())
+                    live=fetched, judge=verdict, slot_source=plan["provider"], slots=placed, stage="ready", timings=clock.done(),
+                    lines=plan.get("lines") or [], density=proj.get("density") or "balanced")
+        if proj["slots"] and not any(x.get("shot") for x in proj["slots"]):
+            store.set_status(pid, "making sure the video gets B-roll", 0.97)
+            proj["rescue"] = ensure_broll(searcher, proj, bool(proj.get("live_search", lib is None)))
         store.save(pid, proj)
         store.set_status(pid, "ready", 1.0)
     except Exception as e:
@@ -251,6 +296,46 @@ def analyse_project(pid: str, searcher):
 
 def start_analyse(pid, searcher):
     threading.Thread(target=analyse_project, args=(pid, searcher), daemon=True, name=f"analyse-{pid}").start()
+
+
+def replan_project(pid: str, searcher, density: str):
+    """Change how much B-roll there is without asking Gemini again: re-select spots from the stored line scores. Spots you
+    locked (swapped, nudged, added) stay exactly as they are; new spots are fetched, placed and checked like in the analysis."""
+    proj = store.load(pid)
+    try:
+        store.set_status(pid, f"re-planning: {rules.DENSITY.get(density, rules.DENSITY['balanced'])['label']}", 0.05)
+        lines = proj.get("lines")
+        if not lines:                                       # projects analysed before line scoring existed
+            store.set_status(pid, "scoring the lines (offline)", 0.1)
+            lines = llm.offline_lines(proj.get("units") or [])
+            proj["lines"] = lines
+        keep = [x for x in proj.get("slots", []) if x.get("locked") and x.get("shot")]
+        new_all = rules.select_spots(lines, proj.get("units") or [], proj.get("duration") or 0, density, proj.get("segments"), keep=keep)
+        fresh = [x for x in new_all if not any(x is k for k in keep)]
+        lib = proj.get("library")
+        also = proj.get("live_library") if not lib else None
+        live_on = bool(proj.get("live_search", lib is None))
+        if fresh and live_on:
+            store.set_status(pid, "fetching B-roll from Pixabay", 0.3)
+            qs, n_main = queries_for(fresh)
+            if lib is None:
+                also = live_library(pid, proj)
+            live.fetch(qs, searcher, None, library_id=lib or also, n_main=n_main)
+        store.set_status(pid, "placing B-roll", 0.6)
+        placed = _fill(searcher, fresh, library=lib, also_lib=also) if fresh else []
+        if placed and llm.provider_name() == "gemini":
+            store.set_status(pid, "Gemini is checking the pictures", 0.8)
+            finish(searcher, placed, lib, also, live_on)
+        proj.update(slots=sorted(keep + placed, key=lambda x: x["start"]), density=density, rendered=False)
+        store.save(pid, proj)
+        store.set_status(pid, "ready", 1.0)
+    except Exception as e:
+        traceback.print_exc()
+        store.set_status(pid, "ready", 1.0, f"re-plan failed: {type(e).__name__}: {e}")
+
+
+def start_replan(pid, searcher, density):
+    threading.Thread(target=replan_project, args=(pid, searcher, density), daemon=True, name=f"replan-{pid}").start()
 
 
 def _shot_file(shot: dict):

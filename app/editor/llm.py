@@ -102,45 +102,72 @@ def offline_queries(text: str) -> tuple:
     return primary, out[:2]
 
 
-def offline_plan(units: list, duration: float, fmap: list) -> dict:
-    segs = [{"start": u["start"], "end": u["end"], "text": u["text"]} for u in units if u["kind"] == "speech"]
-    picked = rules.rule_slots(segs, duration, fmap)
-    out, skipped = [], 0
-    for s in picked:
-        q, alts = offline_queries(s["text"])
-        if q is None:
-            skipped += 1
-            continue
-        out.append({**s, "query": q, "alt_queries": alts, "reason": s.get("reason") or "visual line"})
-    note = f" {skipped} line(s) had no confident visual and were left alone." if skipped else ""
-    return {"provider": "offline", "slots": out,
-            "summary": "Offline engine: spots chosen by rules, queries from the concept vocabulary (no LLM)." + note}
+# offline importance: no LLM, so a few honest signals instead of understanding
+_SPEAKER = re.compile(r"\b(hi|hello|hey|welcome|subscribe|comment|comments|like this video|thanks for watching|see you|let me know|"
+                      r"i think|i guess|you know|so yeah|anyway)\b", re.I)
+_NUMBER = re.compile(r"\d|\b(one|two|three|four|five|ten|hundred|thousand|million|billion|percent)\b", re.I)
+
+
+def offline_lines(units: list) -> list:
+    """Score every speech clip without an LLM: visual = the filmable-line probe; importance from named places, numbers,
+    proper nouns and how much content the line carries, minus greetings / calls to action / asides."""
+    from .. import truth
+    out = []
+    speech = [u for u in units if u.get("kind") == "speech" and (u.get("text") or "").strip()]
+    for k, u in enumerate(speech):
+        text = u["text"]
+        vis = visual_prob(text)
+        places = [n for n, _ in truth.match_places(text)]
+        content = len(keywords(text, n=12).split())
+        proper = len(re.findall(r"(?<!^)(?<![.!?] )\b[A-Z][a-z]{2,}", text))
+        imp = 0.3 + 0.25 * bool(places) + 0.12 * bool(_NUMBER.search(text)) + 0.08 * min(proper, 2) + 0.03 * min(content, 6)
+        role = "place" if places else ("data" if _NUMBER.search(text) else "key point")
+        if _SPEAKER.search(text):
+            imp -= 0.35
+            role = "cta" if k >= len(speech) - 2 else ("hook" if k == 0 else "aside")
+        q, alts = offline_queries(text) if vis >= rules.VISUAL_MIN else (None, [])
+        out.append({"id": u["id"], "importance": round(max(0.0, min(1.0, imp)), 2), "visual": round(vis, 2), "role": role,
+                    "query": q or "", "alt_queries": alts, "anchor": places[0] if places else "",
+                    "reason": {"place": "names a place", "data": "has a number", "key point": "content line",
+                               "cta": "call to action", "hook": "greeting", "aside": "aside"}[role]})
+    return out
+
+
+def offline_plan(units: list, duration: float, fmap: list, segments: list | None = None, density: str = "balanced") -> dict:
+    lines = offline_lines(units)
+    spots = rules.select_spots(lines, units, duration, density, segments)
+    if not spots:
+        spots = topic_spot(units, duration, "", segments)
+    skipped = sum(1 for l in lines if not l["query"])
+    note = f" {skipped} line(s) had nothing filmable and keep the speaker on screen." if skipped else ""
+    return {"provider": "offline", "slots": spots, "lines": lines,
+            "summary": "Offline engine: lines scored by simple signals (places, numbers, filmable words), no LLM." + note}
 
 
 # ───────────────────────── Gemini ─────────────────────────
-PROMPT = """You are a professional video editor adding B-roll (cutaway stock footage) to a talking-head video.
-The video is {dur:.0f} s long. Below are its clips as [id | start-end s] text, then the places where the picture cuts, then the
-creator's script if they supplied one.
+PROMPT = """You are a senior video editor preparing B-roll (cutaway stock footage) for a talking-head video of {dur:.0f} s.
+Below are its clips as [id | start-end s] text, then the places where the picture cuts, then the creator's script if supplied.
+B-roll will be placed ONLY on the lines that matter most, so score EVERY clip honestly:
 
-Decide:
-1. Which moments should be covered by B-roll. Do NOT cover the first {hook} s (the speaker introduces themselves) or the closing call
-   to action; leave the speaker on screen for personal, emotional or direct-address lines ("I", "you", "subscribe"). Cover concrete,
-   visual statements. Cover roughly {cover}% of the video, which means at least {nspots} spot(s) here (fewer only if the script has
-   nothing filmable). Each spot is {mn}-{mx} s, inside one clip, and spots never overlap.
-   A clip longer than {long:.0f} s may hold two spots with different footage. Editors cut to the picture the moment the subject is
-   named, so give each spot an `anchor`: the exact word from the narration at which the footage should appear (the place, object or
-   action being named).
-2. For each spot, what footage to show, as a stock-video search the way you would type it on a stock-footage site:
-   - `query` = 2-4 plain English words about ONE subject only. Never join two ideas ("artificial intelligence code" is bad: it
-     returns neon robots). Name the real subject of the video: if the video teaches Python, a coding spot says "python code" or
-     "programmer typing code", not "programming interface".
-   - Prefer real, filmable footage (people, hands, objects, places, actions) over abstract, CGI, neon, sci-fi or "digital" imagery.
-   - NEVER use these words, stock sites misread them: {banned}.
-   - `alt_queries` = up to 2 different phrasings of the same idea (each also one subject, same rules).
-   Match the topic and the place named in the narration (do not show a different city). If the narration is not English, translate the idea.
-3. A one-sentence `summary` of what the video is about.
+- importance (0-1): how much this line carries the message. High: the main claim or promise, a named place / product / person, a
+  number or result, a vivid example or story beat, the emotional peak, what the viewer must remember. Low: greetings, "welcome
+  back", filler, repetition, asides, meta talk about the video, the closing call to action. Use the full range; most videos have
+  only a few lines above 0.8. If a script is supplied, use its emphasis (headings, repeated ideas, what it builds up to) to judge.
+- visual (0-1): how well REAL stock footage could show this line (concrete things, places, actions = high; opinions, abstract
+  talk, direct address to the camera = low).
+- role: one of hook, key point, example, place, data, story, transition, aside, cta.
+- reason: at most 8 words on why it matters or not ("names the destination", "key claim", "just a greeting").
+- For every clip with visual >= 0.4 also give:
+  `query` = 2-4 plain English words about ONE subject only, the way you would type it on a stock-footage site. Name the real subject
+  ("python code", not "programming interface"; never join two ideas). Prefer real footage (people, hands, objects, places,
+  actions) over abstract, CGI, neon or "digital" imagery. Never use these words: {banned}. Match the place named in the narration
+  (do not show a different city or region). Translate the idea if the narration is not English.
+  `alt_queries` = up to 2 other phrasings of the same idea, same rules.
+  `anchor` = the exact word in the clip at which the footage should appear (the thing being named).
+Also write a one-sentence `summary` of the video.
 
-Return JSON only: {{"summary": str, "slots": [{{"start": float, "end": float, "anchor": str, "query": str, "alt_queries": [str], "reason": str}}]}}
+Return JSON only: {{"summary": str, "lines": [{{"id": int, "importance": float, "visual": float, "role": str, "reason": str,
+"query": str, "alt_queries": [str], "anchor": str}}]}}
 
 CLIPS
 {units}
@@ -153,6 +180,7 @@ SCRIPT
 # words that make stock sites return the wrong thing ("screen" -> green screens, "intro" -> animated intros ...)
 BANNED = ["screen", "background", "intro", "outro", "subscribe", "abstract", "concept", "futuristic", "hologram", "matrix",
           "wallpaper", "template", "loop", "overlay"]
+ROLES = {"hook", "key point", "example", "place", "data", "story", "transition", "aside", "cta"}
 
 
 def clean_query(q: str) -> str:
@@ -162,85 +190,93 @@ def clean_query(q: str) -> str:
     return " ".join(kept if kept else words)[:80]
 
 
-def _word(segments: list, word: str, lo: float, hi: float):
-    """First spoken word equal to `word` that starts in [lo, hi]."""
-    w0 = re.sub(r"[^\w']", "", (word or "").lower())
-    if not w0:
-        return None
-    for seg in segments or []:
-        for w in seg.get("words", []):
-            if lo <= w["s"] <= hi and re.sub(r"[^\w']", "", w["w"].lower()) == w0:
-                return w
-    return None
+def _num(v, default=0.0) -> float:
+    try:
+        return max(0.0, min(1.0, float(v)))
+    except (TypeError, ValueError):
+        return default
 
 
-def _validate(data: dict, units: list, duration: float, segments: list | None = None) -> list:
-    hook, mnslot = rules.hook_s(duration), rules.min_slot(duration)
-    out = []
-    for x in data.get("slots", []):
+def _parse_lines(data: dict, units: list) -> list:
+    ids = {u["id"] for u in units if u.get("kind") == "speech"}
+    out, seen = [], set()
+    for x in data.get("lines", []) or []:
         try:
-            a, b = float(x["start"]), float(x["end"])
+            i = int(x["id"])
         except (KeyError, TypeError, ValueError):
             continue
-        a = max(a, hook)
-        b = min(b, a + rules.MAX_SLOT, duration)
-        u = next((u for u in units if u["kind"] == "speech" and u["start"] - 0.5 <= a <= u["end"]), None)
-        anchor = None
-        w = _word(segments, str(x.get("anchor") or ""), a - 1.5, b - 0.3)
-        if w:                                            # land the cut on the spoken word, as editors do (B-Script: 73 % within 1 s)
-            a2 = max(hook, w["s"] - 0.15)
-            end_cap = min(duration, u["end"] if u else duration)
-            b2 = min(max(b, a2 + mnslot), a2 + rules.MAX_SLOT, end_cap)
-            if b2 - a2 >= mnslot:
-                a, b, anchor = a2, b2, w["w"].strip(".,!?\"'")
-        if b - a < mnslot or any(not (b + rules.GAP_S <= o["start"] or a >= o["end"] + rules.GAP_S) for o in out):
+        if i not in ids or i in seen:
             continue
-        q = clean_query(x.get("query"))
-        if not q:
-            continue
-        alts = [clean_query(v) for v in (x.get("alt_queries") or [])][:2]
-        out.append({"start": round(a, 2), "end": round(b, 2), "text": u["text"] if u else q, "query": q, "anchor": anchor,
-                    "alt_queries": [v for v in alts if v and v != q], "reason": str(x.get("reason", ""))[:140] or "editor's choice"})
+        seen.add(i)
+        vis = _num(x.get("visual"))
+        q = clean_query(x.get("query")) if vis >= rules.VISUAL_MIN else ""
+        alts = [clean_query(v) for v in (x.get("alt_queries") or [])][:2] if q else []
+        role = str(x.get("role") or "").strip().lower()
+        out.append({"id": i, "importance": round(_num(x.get("importance")), 2), "visual": round(vis, 2),
+                    "role": role if role in ROLES else "key point", "reason": str(x.get("reason") or "")[:80],
+                    "query": q, "alt_queries": [v for v in alts if v and v != q], "anchor": str(x.get("anchor") or "")[:40]})
     return out
 
 
-def _gemini(units: list, cuts: list, duration: float, script: str | None, segments: list | None = None) -> dict | None:
+def topic_spot(units: list, duration: float, summary: str, segments: list | None = None) -> list:
+    """Last resort when no line looks filmable (pure talk): one spot on the longest line after the opening, searched by the
+    video's topic words, so the video still gets B-roll that is at least on subject."""
+    hook, mn = rules.hook_s(duration), rules.min_slot(duration)
+    best = None
+    for u in units:
+        if u.get("kind") != "speech" or not (u.get("text") or "").strip():
+            continue
+        a = max(u["start"], hook) + 0.1
+        b = min(u["end"] - 0.05, a + rules.MAX_SLOT, duration)
+        if b - a >= mn * 0.8 and (best is None or b - a > best[1] - best[0]):
+            best = (a, b, u)
+    if not best:
+        return []
+    a, b, u = best
+    q = keywords(summary, n=3) or keywords(u["text"], n=3) or "people talking"
+    alt = keywords(u["text"], n=3)
+    return [{"start": round(a, 2), "end": round(b, 2), "text": u["text"], "query": q,
+             "alt_queries": [alt] if alt and alt != q else [], "anchor": None, "importance": 0.3, "visual": 0.4, "role": "topic",
+             "reason": "no line was clearly filmable: B-roll on the video's topic", "guaranteed": True}]
+
+
+def _gemini(units: list, cuts: list, duration: float, script: str | None, segments: list | None = None,
+            density: str = "balanced") -> dict | None:
     if not gemini.enabled():
         return None
-    lines = chr(10).join(f"[{u['id']} | {u['start']:.1f}-{u['end']:.1f}] {u['text']}" for u in units if u["kind"] == "speech")
-    n_speech = sum(1 for u in units if u["kind"] == "speech")
-    nspots = max(2, round(rules.TARGET_COVER * duration / 3.5))
-    prompt = PROMPT.format(
-        dur=duration, hook=rules.hook_s(duration), cover=int(rules.TARGET_COVER * 100), nspots=nspots, mn=rules.min_slot(duration),
-        mx=rules.MAX_SLOT, long=rules.MAX_SLOT + 1, banned=", ".join(BANNED), units=lines,
-        cuts=", ".join(f"{c:.1f}" for c in cuts) or "none", script=(script or "").strip() or "(none: use the clips)")
+    speech = [u for u in units if u.get("kind") == "speech"]
+    text = chr(10).join(f"[{u['id']} | {u['start']:.1f}-{u['end']:.1f}] {u['text']}" for u in speech)
+    prompt = PROMPT.format(dur=duration, banned=", ".join(BANNED), units=text,
+                           cuts=", ".join(f"{c:.1f}" for c in cuts) or "none", script=(script or "").strip() or "(none: use the clips)")
     best, data = [], {}
-
-    def cover(sl):
-        return sum(o["end"] - o["start"] for o in sl)
-
-    for attempt in range(2):                    # too few spots gets one more try; the better answer is kept
-        d = gemini.generate_json(prompt, temperature=0.3 if attempt == 0 else 0.7)
-        got = _validate(d, units, duration, segments)
-        if cover(got) > cover(best):
+    for attempt in range(2):                    # an answer that skips lines gets one more try; the more complete one is kept
+        d = gemini.generate_json(prompt, temperature=0.2 if attempt == 0 else 0.5)
+        got = _parse_lines(d, units)
+        if len(got) > len(best):
             best, data = got, d
-        if len(best) >= min(nspots, n_speech):   # only too FEW spots justifies another ~8 s Gemini call
+        if len(best) >= max(1, int(0.8 * len(speech))):
             break
     if not best:
         return None
-    return {"provider": "gemini", "slots": sorted(best, key=lambda s: s["start"]), "summary": str(data.get("summary", ""))[:300]}
+    spots = rules.select_spots(best, units, duration, density, segments)
+    summary = str(data.get("summary", ""))[:300]
+    if not spots:
+        spots = topic_spot(units, duration, summary, segments)
+    return {"provider": "gemini", "slots": spots, "lines": best, "summary": summary}
 
 
-def plan(units: list, cuts: list, duration: float, fmap: list, script: str | None = None, segments: list | None = None) -> dict:
+def plan(units: list, cuts: list, duration: float, fmap, script: str | None = None, segments: list | None = None,
+         density: str = "balanced") -> dict:
+    """Score every line (importance, visual, role, query) and place B-roll on the strongest ones for the chosen amount."""
     t0 = time.time()
     err = None
     try:
-        g = _gemini(units, cuts, duration, script, segments)
+        g = _gemini(units, cuts, duration, script, segments, density)
         if g:
             g["ms"], g["error"] = int((time.time() - t0) * 1000), None
             return g
     except Exception as e:                      # network, quota, bad JSON: never block the edit
         err = gemini.redact(f"{type(e).__name__}: {e}")
-    o = offline_plan(units, duration, fmap() if callable(fmap) else fmap)
+    o = offline_plan(units, duration, fmap() if callable(fmap) else fmap, segments, density)
     o["ms"], o["error"] = int((time.time() - t0) * 1000), err
     return o
