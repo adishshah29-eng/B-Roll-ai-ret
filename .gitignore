@@ -5,3 +5,10 @@ footage/
 __pycache__/
 *.pyc
 .venv/
+
+# working notes and AI-assistant files: kept locally, not part of the published repo
+brain/
+design-system/
+.claude/
+CLAUDE.md
+.pytest_cache/

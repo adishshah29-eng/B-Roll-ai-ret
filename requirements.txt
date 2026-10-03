@@ -13,5 +13,8 @@ PyYAML
 requests
 httpx
 pytest
-# P5 (TRUE): OCR
-# easyocr
+# Editor: speech-to-text with word timestamps, bundled ffmpeg
+faster-whisper
+imageio-ffmpeg
+# TRUE: signboard OCR
+rapidocr-onnxruntime
